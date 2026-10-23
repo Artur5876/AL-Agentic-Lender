@@ -1,0 +1,37 @@
+# Local stack (US-341): one command starts everything the team needs.
+#   docker compose up --build
+# Then seed demo data:  see README "Seed demo data".
+#
+#   Firebase Emulator UI  http://localhost:4000
+#   Firestore emulator    localhost:8080
+#   Auth emulator         localhost:9099
+#   Backend API + docs    http://localhost:8000/docs
+#   Local EVM chain       http://localhost:8545  (used from Sprint 2, US-321)
+
+services:
+  firebase:
+    build: ./firebase
+    ports:
+      - "4000:4000"
+      - "8080:8080"
+      - "9099:9099"
+
+  api:
+    build: ./backend
+    environment:
+      AL_REPOSITORY: firestore
+      AL_AUTH_MODE: firebase
+      AL_FIREBASE_PROJECT_ID: demo-al-group11
+      AL_DEFAULT_BROKER_UID: broker-ciaran
+      FIRESTORE_EMULATOR_HOST: firebase:8080
+      FIREBASE_AUTH_EMULATOR_HOST: firebase:9099
+    ports:
+      - "8000:8000"
+    depends_on:
+      - firebase
+
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337"]
+    ports:
+      - "8545:8545"

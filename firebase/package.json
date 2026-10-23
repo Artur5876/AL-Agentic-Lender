@@ -1,0 +1,14 @@
+{
+  "name": "al-firebase",
+  "private": true,
+  "description": "Firestore rules, indexes and emulator config for AL (US-303)",
+  "scripts": {
+    "emulators": "firebase emulators:start --project demo-al-group11",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-al-group11 \"node --test tests/rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.34.1"
+  }
+}

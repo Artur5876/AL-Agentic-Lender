@@ -1,0 +1,133 @@
+rules_version = '2';
+
+// AL Firestore security rules (US-303). Design: docs/data-model.md.
+//
+// Key ideas
+// - Roles come from the custom claim `role` in the sign-in token (set only by the
+//   Admin SDK). No claim = borrower.
+// - Clients never write applications, valuations, deliberations, decisions or
+//   payments. The backend writes those with the Admin SDK, which bypasses rules.
+// - Anything not matched below is denied.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function role() { return request.auth.token.get('role', 'borrower'); }
+    function isBorrower() { return signedIn() && role() == 'borrower'; }
+    function isBroker() { return signedIn() && role() == 'broker'; }
+    function isUnderwriter() { return signedIn() && role() == 'underwriter'; }
+    function isStaff() { return isBroker() || isUnderwriter(); }
+
+    // Same rule as can_read_application() in backend/app/auth.py. Keep in step.
+    function canReadApp(app) {
+      return isUnderwriter()
+        || (isBroker() && app.brokerId == uid())
+        || (isBorrower() && app.borrowerId == uid());
+    }
+    function appData(appId) {
+      return get(/databases/$(database)/documents/applications/$(appId)).data;
+    }
+    function data() { return request.resource.data; }
+
+    // ---------- users (US-101, US-201) ----------
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isUnderwriter());
+
+      // A borrower creates only their own profile, only as a borrower.
+      allow create: if isBorrower() && uid() == userId
+        && data().keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt'])
+        && data().uid == userId
+        && data().email == request.auth.token.email
+        && data().displayName is string && data().displayName.size() <= 100
+        && data().role == 'borrower'
+        && data().createdAt == request.time;
+
+      // Only the display name may change later; role can never be edited by a client.
+      allow update: if signedIn() && uid() == userId
+        && data().diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        && data().displayName is string && data().displayName.size() <= 100;
+
+      allow delete: if false;
+    }
+
+    // ---------- applications (US-112, US-202, US-203, US-211) ----------
+    match /applications/{appId} {
+      allow read: if canReadApp(resource.data);
+      allow write: if false; // backend only
+
+      // ---------- messages (US-141, US-255) ----------
+      match /messages/{messageId} {
+        allow read: if canReadApp(appData(appId));
+        allow create: if canReadApp(appData(appId))
+          && data().keys().hasOnly(['senderId', 'senderRole', 'text', 'sentAt'])
+          && data().senderId == uid()
+          && data().senderRole == role()
+          && data().text is string
+          && data().text.size() > 0 && data().text.size() <= 2000
+          && data().sentAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------- valuations (US-121) ----------
+    match /valuations/{valuationId} {
+      allow read: if signedIn() && (resource.data.requestedBy == uid() || isStaff());
+      allow write: if false;
+    }
+
+    // ---------- AI deliberation log (US-231, US-415) ----------
+    match /deliberations/{appId} {
+      allow read: if isStaff() && canReadApp(appData(appId));
+      allow write: if false;
+      match /steps/{stepId} {
+        allow read: if isStaff() && canReadApp(appData(appId));
+        allow write: if false;
+      }
+    }
+
+    // ---------- decisions (US-251, US-252) ----------
+    match /decisions/{decisionId} {
+      // brokerId is copied onto the decision so list queries can be checked without get().
+      allow read: if isUnderwriter() || (isBroker() && resource.data.brokerId == uid());
+      allow write: if false;
+    }
+
+    // ---------- payments (US-151) ----------
+    match /payments/{paymentId} {
+      allow read: if signedIn() && (resource.data.borrowerId == uid() || isUnderwriter());
+      allow write: if false; // only after the backend confirms with Stripe (test mode)
+    }
+
+    // ---------- support requests (US-161) ----------
+    match /supportRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.borrowerId == uid() || isStaff());
+      allow create: if isBorrower()
+        && data().keys().hasOnly(['borrowerId', 'applicationId', 'category',
+                                  'description', 'status', 'createdAt'])
+        && data().borrowerId == uid()
+        && data().category in ['my_application', 'payment', 'account', 'other']
+        && data().description is string
+        && data().description.size() > 0 && data().description.size() <= 2000
+        && data().status == 'open'
+        && data().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // ---------- reviews (US-162) ----------
+    match /reviews/{reviewId} {
+      allow read: if signedIn() && (resource.data.borrowerId == uid() || isUnderwriter());
+      allow create: if isBorrower()
+        && data().keys().hasOnly(['borrowerId', 'rating', 'comment', 'createdAt'])
+        && data().borrowerId == uid()
+        && data().rating is int && data().rating >= 1 && data().rating <= 5
+        && (!('comment' in data()) || (data().comment is string && data().comment.size() <= 1000))
+        && data().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // counters/* and everything else: no client access (default deny).
+  }
+}
