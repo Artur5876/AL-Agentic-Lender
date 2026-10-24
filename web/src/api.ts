@@ -5,20 +5,30 @@ const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 export type DecisionOutcome = "underwriter_approved" | "conditionally_approved" | "declined";
 
 /**
- * Clients never write applications to Firestore: changes go through the Python API
- * (data model rule 1). The API checks the ID token and the role itself.
+ * Change an application's status through the API (docs/api.md, section 3):
+ *   POST /applications/{id}/status   body: { "to": "<status>", "reason": "..." }
  *
- * TODO: the URL and body below are a GUESS. Check docs/api.md (or http://localhost:8000/docs)
- * and change them to match the real endpoint.
+ * Clients never write applications to Firestore (data model rule 1). The API checks the
+ * token, the role and the state machine (backend/app/lifecycle.py), so a wrong move is
+ * rejected there: 403 actor_not_allowed, 409 invalid_transition, 422 reason_required.
+ * A reason is required for "declined" and "conditionally_approved".
  */
-export async function decide(applicationId: string, outcome: DecisionOutcome, reason?: string) {
+export async function decide(applicationId: string, to: DecisionOutcome, reason?: string) {
   const token = await auth.currentUser?.getIdToken();
-  const res = await fetch(`${API_URL}/applications/${applicationId}/decision`, {
+  const res = await fetch(`${API_URL}/applications/${encodeURIComponent(applicationId)}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ outcome, reason }),
+    body: JSON.stringify({ to, reason }),
   });
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${await res.text()}`);
+    // Errors always look like { error: { code, message, details } } (docs/api.md, section 4).
+    let message = `Request failed (${res.status}).`;
+    try {
+      const body = await res.json();
+      if (body?.error?.message) message = body.error.message;
+    } catch {
+      // The body was not JSON; keep the generic message.
+    }
+    throw new Error(message);
   }
 }
