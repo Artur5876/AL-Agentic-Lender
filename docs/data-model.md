@@ -66,6 +66,7 @@ The document ID is the human reference, e.g. `AL-2026-0117` (matches the mock-up
 | `status` | string | API | Code from section 3 |
 | `statusHistory` | array of map | API | `{status, at, by, role, reason}` appended on every change |
 | `buyerType` | string | client input | `first_time` or `subsequent` |
+| `limitedBy` | string | calculation module (US-410) | `lti` or `deposit` |
 | `financials` | map | client input | `grossAnnualIncome`, `monthlyDebts`, `deposit`, `loanAmount`, `termYears` |
 | `property` | map | client input | `county`, `floorAreaM2`, `bedrooms`, `propertyType`, `ber`, `askingPrice` |
 | `valuation` | map or null | API | Copy of the valuation used: `valuationId`, `estimate`, `low`, `high`, `modelVersion` |
