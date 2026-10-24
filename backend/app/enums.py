@@ -14,4 +14,4 @@ class LimitedBy(StrEnum):
     """Which rule caps the indicative maximum loan (US-410)."""
 
     LTI = "lti"  # loan-to-income cap (multiple of gross income)
-    LTV = "ltv"  # loan-to-value cap (minimum deposit rule)
+    DEPOSIT = "deposit"  # max loan capped by the minimum-deposit rule
