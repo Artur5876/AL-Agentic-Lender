@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun LoginScreen() {
@@ -84,32 +85,18 @@ fun LoginScreen() {
 
                     else -> {
 
-                        /*
-                         * TODO US-102
-                         *
-                         * Firebase Authentication
-                         *
-                         * signInWithEmailAndPassword(
-                         *      email,
-                         *      password
-                         * )
-                         *
-                         * On success:
-                         * - Navigate to PropertyCheckerScreen
-                         * - Firebase session should persist
-                         *
-                         * On failure:
-                         * - Show "Invalid email or password"
-                         *
-                         * Acceptance Criteria:
-                         * ✅ Login
-                         * ✅ Logout
-                         * ✅ Wrong credentials handled
-                         * ✅ Session persists after restart
-                         */
+                        FirebaseAuth.getInstance()
+                            .signInWithEmailAndPassword(email, password)
+                            .addOnSuccessListener {
 
-                        successMessage =
-                            "Validation successful. Ready for Firebase sign in."
+                                successMessage = "Login successful"
+
+                            }
+                            .addOnFailureListener {
+
+                                errorMessage = "Invalid email or password"
+
+                            }
                     }
                 }
             },
@@ -153,8 +140,9 @@ fun LoginScreen() {
                  * Return to LoginScreen
                  */
 
-                successMessage =
-                    "Logout placeholder."
+                FirebaseAuth.getInstance().signOut()
+
+                successMessage = "Logged out successfully"
             },
             modifier = Modifier.fillMaxWidth()
         ) {

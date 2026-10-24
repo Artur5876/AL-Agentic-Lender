@@ -18,24 +18,25 @@ fun PropertyCheckerScreen() {
     var askingPrice by remember { mutableStateOf("") }
 
     var estimate by remember { mutableStateOf("") }
+    var lowEstimate by remember { mutableStateOf("") }
+    var highEstimate by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
 
     var countyExpanded by remember { mutableStateOf(false) }
     var propertyExpanded by remember { mutableStateOf(false) }
     var berExpanded by remember { mutableStateOf(false) }
 
+    var modelVersion by remember { mutableStateOf("") }
+    var valuationId by remember { mutableStateOf("") }
+
     val counties = listOf(
-        "Antrim",
-        "Armagh",
         "Carlow",
         "Cavan",
         "Clare",
         "Cork",
-        "Derry",
         "Donegal",
-        "Down",
         "Dublin",
-        "Fermanagh",
         "Galway",
         "Kerry",
         "Kildare",
@@ -52,7 +53,6 @@ fun PropertyCheckerScreen() {
         "Roscommon",
         "Sligo",
         "Tipperary",
-        "Tyrone",
         "Waterford",
         "Westmeath",
         "Wexford",
@@ -222,16 +222,29 @@ fun PropertyCheckerScreen() {
             onClick = {
 
                 errorMessage = ""
+
                 estimate = ""
+                lowEstimate = ""
+                highEstimate = ""
+                modelVersion = ""
+                valuationId = ""
 
                 if (county.isBlank()) {
                     errorMessage = "County is required"
                 }
-                else if (floorArea.isBlank()) {
-                    errorMessage = "Floor area is required"
+                else if (
+                    floorArea.toIntOrNull() == null ||
+                    floorArea.toInt() <= 0
+                ) {
+                    errorMessage =
+                        "Floor area must be greater than 0"
                 }
-                else if (bedrooms.isBlank()) {
-                    errorMessage = "Bedrooms are required"
+                else if (
+                    bedrooms.toIntOrNull() == null ||
+                    bedrooms.toInt() <= 0
+                ) {
+                    errorMessage =
+                        "Bedrooms must be greater than 0"
                 }
                 else if (propertyType.isBlank()) {
                     errorMessage = "Property type is required"
@@ -239,35 +252,32 @@ fun PropertyCheckerScreen() {
                 else if (ber.isBlank()) {
                     errorMessage = "BER rating is required"
                 }
-                else if (askingPrice.isBlank()) {
-                    errorMessage = "Asking price is required"
+                else if (
+                    askingPrice.toDoubleOrNull() == null ||
+                    askingPrice.toDouble() <= 0
+                ) {
+                    errorMessage =
+                        "Asking price must be greater than 0"
                 }
                 else {
 
+                    loading = true
+
                     /*
-                     * TODO US-121
-                     *
-                     * Replace this stub with:
-                     *
-                     * POST http://10.0.2.2:8000/valuations
-                     *
-                     * Request:
-                     * county
-                     * floorAreaM2
-                     * bedrooms
-                     * propertyType
-                     * ber
-                     *
-                     * Response:
-                     * valuationId
-                     * estimate
-                     * low
-                     * high
-                     *
-                     * Display returned estimate here.
+                     * US-121 API PLACEHOLDER
                      */
 
-                    estimate = "€$askingPrice"
+                    estimate = "€380,000"
+
+                    lowEstimate = "€360,000"
+
+                    highEstimate = "€400,000"
+
+                    modelVersion = "seed"
+
+                    valuationId = "AL-VAL-DEMO"
+
+                    loading = false
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -276,6 +286,15 @@ fun PropertyCheckerScreen() {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (loading) {
+
+            CircularProgressIndicator()
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+        }
 
         if (errorMessage.isNotEmpty()) {
             Text(
@@ -288,10 +307,40 @@ fun PropertyCheckerScreen() {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                text = "Estimated Value: $estimate",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
+                    Text(
+                        text = "Estimated Value: $estimate",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(4.dp)
+                    )
+
+                    Text(
+                        text = "Low Estimate: $lowEstimate"
+                    )
+
+                    Text(
+                        text = "High Estimate: $highEstimate"
+                    )
+
+                    Text(
+                        text = "Model Version: $modelVersion"
+                    )
+
+                    Text(
+                        text = "Valuation ID: $valuationId"
+                    )
+                }
+            }
         }
     }
 }

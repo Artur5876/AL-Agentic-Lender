@@ -22,6 +22,10 @@ fun LoanApplicationScreen() {
     var errorMessage by remember { mutableStateOf("") }
     var successMessage by remember { mutableStateOf("") }
 
+    var applicationReference by remember { mutableStateOf("") }
+    var applicationStatus by remember { mutableStateOf("") }
+
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -177,8 +181,9 @@ fun LoanApplicationScreen() {
                          * Attach token to request header.
                          */
 
-                        successMessage =
-                            "Application validated successfully and is ready for API submission."
+                        applicationReference = "AL-2026-0122"
+                        applicationStatus = "Applied"
+                        successMessage = "Application submitted successfully."
                     }
                 }
             },
@@ -203,6 +208,31 @@ fun LoanApplicationScreen() {
                 text = successMessage,
                 color = MaterialTheme.colorScheme.primary
             )
+        }
+
+        if (applicationReference.isNotEmpty()) {
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
+                    Text(
+                        text = "Application Reference: $applicationReference"
+                    )
+
+                    Text(
+                        text = "Status: $applicationStatus"
+                    )
+                }
+            }
         }
     }
 }

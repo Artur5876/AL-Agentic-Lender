@@ -9,6 +9,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+
 @Composable
 fun RegisterScreen() {
 
@@ -99,34 +102,49 @@ fun RegisterScreen() {
 
                     else -> {
 
-                        /*
-                         * TODO US-101
-                         *
-                         * Firebase Auth:
-                         *
-                         * createUserWithEmailAndPassword(
-                         *      email,
-                         *      password
-                         * )
-                         *
-                         * Then create Firestore user profile:
-                         *
-                         * users/{uid}
-                         *
-                         * {
-                         *   "uid": uid,
-                         *   "email": email,
-                         *   "role": "borrower"
-                         * }
-                         *
-                         * Acceptance Criteria:
-                         * ✅ Firebase Auth account created
-                         * ✅ Firestore profile created
-                         * ✅ role = borrower
-                         */
+                        val auth = FirebaseAuth.getInstance()
 
-                        successMessage =
-                            "Validation successful. Ready for Firebase registration."
+                        println("Register screen auth instance: ${auth.hashCode()}")
+
+                        auth.createUserWithEmailAndPassword(
+                            email,
+                            password
+                        )
+                            .addOnSuccessListener { authResult ->
+
+                                val uid = authResult.user?.uid ?: ""
+
+                                FirebaseFirestore.getInstance()
+                                    .collection("users")
+                                    .document(uid)
+                                    .set(
+                                        mapOf(
+                                            "uid" to uid,
+                                            "email" to email,
+                                            "role" to "borrower"
+                                        )
+                                    )
+                                    .addOnSuccessListener {
+
+                                        successMessage =
+                                            "Account created successfully."
+
+                                    }
+                                    .addOnFailureListener { e ->
+
+                                        e.printStackTrace()
+
+                                        errorMessage =
+                                            "Firestore error: ${e.javaClass.simpleName} - ${e.message}"
+                                    }
+                            }
+                            .addOnFailureListener { e ->
+
+                                e.printStackTrace()
+
+                                errorMessage =
+                                    "Registration failed: ${e.javaClass.simpleName} - ${e.message}"
+                            }
                     }
                 }
             },
