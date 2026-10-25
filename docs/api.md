@@ -30,6 +30,68 @@ connectAuthEmulator(auth, "http://localhost:9099");
 connectFirestoreEmulator(db, "localhost", 8080);
 ```
 
+## 1a. Mobile quick start (US-112, US-121)
+
+Everything below runs on your laptop. The Android emulator reaches the laptop as `10.0.2.2`,
+so the app uses `http://10.0.2.2:8000` (API), `10.0.2.2:9099` (Auth) and `10.0.2.2:8080`
+(Firestore). The `curl` commands use `localhost` because they run on the laptop itself.
+
+1. **Start the stack and seed it** (repo root):
+
+   ```bash
+   docker compose up --build
+   # in a second terminal:
+   export FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+   python scripts/seed_emulator.py
+   ```
+
+   Without Docker, use README "Option B" instead; the ports are the same.
+
+2. **Sign in as the demo borrower** and copy `idToken` from the response.
+   Demo login: `aoife@example.com` / `al-demo-pass` (emulator only, not a real account).
+   The emulator accepts any `key` value.
+
+   ```bash
+   curl -s -X POST "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=any" \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"aoife@example.com","password":"al-demo-pass","returnSecureToken":true}'
+   export TOKEN=<idToken from the response>
+   ```
+
+   In the app you do not need this step: sign in with `Firebase.auth` (pointed at the emulator)
+   and use `getIdToken()` as in section 2.
+
+3. **Get a valuation, then submit the application** (body from section 3):
+
+   ```bash
+   curl -s -X POST localhost:8000/valuations -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"county":"Cork","floorAreaM2":110,"bedrooms":3,"propertyType":"semi_detached","ber":"B2"}'
+   # -> 201 {"valuationId":"...","estimate":380000.0,...,"modelVersion":"stub-0","isStub":true}
+
+   curl -s -X POST localhost:8000/applications -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"buyerType":"first_time",
+          "financials":{"grossAnnualIncome":95000,"monthlyDebts":300,"deposit":60000,"loanAmount":335000,"termYears":30},
+          "property":{"county":"Cork","floorAreaM2":110,"bedrooms":3,"propertyType":"semi_detached","ber":"B2","askingPrice":395000},
+          "valuationId":"<valuationId from the call above>"}'
+   # -> 201 {"id":"AL-2026-0122",...,"status":"applied","statusLabel":"Applied",...,"metrics":null}
+   ```
+
+4. **Check it landed in Firestore**: open http://localhost:4000/firestore → `applications` →
+   the new ID, or from the command line (`Bearer owner` = emulator admin, skips the rules):
+
+   ```bash
+   curl -s -H "Authorization: Bearer owner" \
+     "http://localhost:8080/v1/projects/demo-al-group11/databases/(default)/documents/applications/AL-2026-0122"
+   ```
+
+   `fields.status.stringValue` must be `"applied"`.
+
+**Registration (US-101)** writes `users/{uid}` directly, so it must match the security rules
+exactly: `uid`, `email` (the email from the sign-in token), `displayName`, `role: "borrower"` and
+`createdAt: FieldValue.serverTimestamp()`. Nothing else is allowed. See `docs/data-model.md` 2.1.
+
 ## 2. Calling the API
 
 Every request needs the signed-in user's Firebase ID token:
