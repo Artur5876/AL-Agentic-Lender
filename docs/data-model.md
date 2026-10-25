@@ -70,7 +70,7 @@ The document ID is the human reference, e.g. `AL-2026-0117` (matches the mock-up
 | `financials` | map | client input | `grossAnnualIncome`, `monthlyDebts`, `deposit`, `loanAmount`, `termYears` |
 | `property` | map | client input | `county`, `floorAreaM2`, `bedrooms`, `propertyType`, `ber`, `askingPrice` |
 | `valuation` | map or null | API | Copy of the valuation used: `valuationId`, `estimate`, `low`, `high`, `modelVersion` |
-| `metrics` | map or null | API (US-410) | `lti`, `ltv`, `dti`, `stressedDti`, `monthlyRepayment`. **Null until the calculation module is connected** |
+| `metrics` | map | API (US-410) | `lti`, `ltv`, `dti`, `stressedDti`, `monthlyRepayment`, and `checks` (`ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`). `lti`/`dti`/`stressedDti` are null when income is 0. Seed documents carry illustrative numbers marked `source: "seed-illustrative"` and no `checks` |
 | `riskTier` | string or null | open decision | `low`, `medium`, `high`. Who sets it is not in the backlog — see section 5 |
 | `aiRecommendation` | map or null | API (US-313/414) | `decision`, `deliberationId`, `completedAt` — S2 |
 | `decision` | map or null | API (US-251/252) | `outcome`, `reason`, `by`, `at` — S2 |
@@ -136,5 +136,7 @@ Composite indexes for these are in `firebase/firestore.indexes.json`.
 2. How a broker gets assigned in S1 (US-304 is S3). Proposal: `AL_DEFAULT_BROKER_UID` config, so every
    new application goes to the one demo broker.
 3. Are the 26 counties enough, or does Dublin need splitting for the valuation model? (AI lead)
+   S1: kept at 26 counties, because the Property Price Register gives county, not district,
+   for the price levels the model is built on.
 4. Does the valuation response also return the asking-price comparison (US-122), so the 10% threshold
    lives in one place? Proposal: yes, from the calculation module (US-410).

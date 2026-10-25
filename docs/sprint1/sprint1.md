@@ -114,15 +114,15 @@ US-122 (asking-price comparison) is a Sprint 2 story.
 | **Main flow** | 1. Clone repo. 2. `docker compose up --build`. 3. Run seed script. 4. Open emulator UI, API docs, chain RPC. |
 | **Alternative flow** | Port in use → change the port mapping in `docker-compose.yml`. |
 
-### UC-F4.1 Property valuation (US-401, US-402, US-403) — DRAFT - owner to check
+### UC-F4.1 Property valuation (US-401, US-402, US-403)
 
 | | |
 |---|---|
 | **Actors** | AI developer (training); client app (prediction) |
-| **Main flow** | 1. AI developer cleans the chosen housing dataset with a reproducible script. 2. Trains a regression model and compares it with the baseline (median price per county) on held-out data, reporting MAE for both. 3. The model is loaded by the backend; `POST /valuations` returns estimate, range and model version. |
+| **Main flow** | 1. AI developer cleans the Property Price Register with a reproducible script and generates synthetic listings on its county medians. 2. Trains a regression model and compares it with the baseline (median price per county) on held-out data, reporting MAE for both. 3. The model is loaded by the backend; `POST /valuations` returns estimate, range and model version. |
 | **Alternative flows** | A1 Invalid input (unknown county, BER "Z9"): 422. A2 Model not loaded: the endpoint returns the stub with `isStub: true`. |
 
-### UC-F4.2 Calculation module (US-410) — DRAFT - owner to check
+### UC-F4.2 Calculation module (US-410)
 
 | | |
 |---|---|
@@ -204,10 +204,10 @@ All Core results below come from runs on 25 Oct 2026 on branch `sprint1-core-fin
   `docs/api.md`; live docs at `/docs`.
 - **Design:** FastAPI + Pydantic validation; one error shape `{error:{code,message,details}}`;
   repository interface (memory for tests, Firestore for real).
-- **Implementation notes:** valuation and metrics are still placeholders in
-  `backend/app/integrations.py` (`estimate_value` returns fixed numbers with
-  `modelVersion: "stub-0"`, `compute_metrics` returns `None`) until US-403 and US-410 are
-  connected. End-to-end test against the emulators: signed in as `aoife@example.com` through
+- **Implementation notes:** at the time of this test run valuation and metrics were still
+  placeholders in `backend/app/integrations.py` (`estimate_value` returned fixed numbers with
+  `modelVersion: "stub-0"`, `compute_metrics` returned `None`); they are now connected, see
+  US-403 and US-410. End-to-end test against the emulators: signed in as `aoife@example.com` through
   the Auth emulator REST API, `POST /valuations` → 201 with `isStub: true`,
   `POST /applications` → 201 `AL-2026-0122`, status `applied`, valuation copied, `metrics: null`;
   the document was read back from the Firestore emulator with status `applied`, and the borrower
@@ -242,7 +242,8 @@ All Core results below come from runs on 25 Oct 2026 on branch `sprint1-core-fin
 - **Wire frame:** not applicable.
 - **Design:** `.github/workflows/ci.yml`, triggered on every pull request and on pushes to `main`.
   One job per folder so a failure points straight at the subsystem: `backend` (Python 3.12,
-  `pip install -r requirements-dev.txt`, `pytest -q`), `ai` (`pytest -q`), `firebase-rules`
+  `pip install -r requirements-dev.txt`, `pytest -q`), `ai` (`pip install -r requirements.txt`,
+  `pytest -q`; pandas, numpy and scikit-learn were added for US-401/402), `firebase-rules`
   (Java 21 + Node 22, `npm ci`, `npm run test:rules`), `web` (Node 22, `npm ci`, `npm run build`).
 - **Implementation notes:** every command was run locally before the workflow was added
   (Python 3.13, Node 20, Java 21): backend 102 passed; ai 27 passed; rules 35 passed;
@@ -317,33 +318,137 @@ All Core results below come from runs on 25 Oct 2026 on branch `sprint1-core-fin
 - **Design:**
 - **Implementation notes:**
 
-### US-401 Cleaned dataset — To be written by AI lead
+### US-401 Cleaned housing dataset (AI)
 
-- **Wire frame:** not applicable
-- **Test cases:**
-- **Design:**
-- **Implementation notes:**
+- **Wire frame:** not applicable.
+- **Design:** hybrid dataset. No open Irish dataset has county, floor area, bedrooms, property
+  type and BER together: the Property Price Register (PPR) records only price, address and
+  county. So county price levels come from the **real PPR 2025** file, and the other features are
+  **synthetic** (README rule "synthetic data only"). Two reproducible scripts in `ai/valuation/`:
+  - `ppr.py` cleans PPR and writes `data/county_medians.csv` (median price and number of sales
+    per county). Rules: read as Windows-1252 (the euro sign is byte 0x80), parse `€239,000.00`
+    to a number, drop sales marked *Not Full Market Price*, drop new dwellings (their price
+    excludes VAT, so it is not comparable), drop unknown counties and duplicate sales
+    (same date, address and price), drop prices below the 1st or above the 99th percentile
+    **within each county** (a €1m sale is normal in Dublin and an outlier in Leitrim).
+  - `generate.py` writes `data/listings.csv`: 20,000 listings, fixed seed 11. County is drawn in
+    proportion to real PPR sales; property type, bedrooms (by type), floor area (by bedrooms) and
+    BER follow fixed distributions. Price = county median × (area / 100 m²)^0.7 × type factor ×
+    BER factor × log-normal noise (σ = 0.15). All coefficients are constants at the top of the
+    file.
+  - Allowed values (`schema.py`) are the same lists as the API (`backend/app/models.py`).
+- **Implementation notes:** the raw PPR file is not committed (`ai/valuation/data/raw/` is in
+  `.gitignore` and `.dockerignore`); download `PPR-2025.csv` from propertypriceregister.ie,
+  then `python -m valuation.ppr` and `python -m valuation.generate` from `ai/`. Cleaning report
+  for PPR 2025:
 
-### US-402 Valuation model — To be written by AI lead
+  | Step | Rows |
+  |---|---|
+  | Raw sales | 62,098 |
+  | Not full market price | −3,273 |
+  | New dwelling / VAT exclusive | −13,504 |
+  | Unknown county | −0 |
+  | Duplicate | −38 |
+  | Outlier (per county) | −895 |
+  | **Clean** | **44,388** |
 
-- **Wire frame:** not applicable
-- **Test cases:**
-- **Design:**
-- **Implementation notes:**
+  Medians range from €175,000 (Donegal) to €482,000 (Dublin, 14,499 sales). In the generated
+  data the median by type is apartment €229k, terraced €305k, semi-detached €377k, bungalow
+  €358k, detached €500k.
 
-### US-403 Valuation endpoint — To be written by AI lead
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-401-01 | Parse PPR prices (`test_parse_price`) | `€395,000.00` → 395000.0, cents kept | Pass |
+| TC-401-02 | Each cleaning rule on a two-row table (`test_each_rule_removes_its_row`) | Not-full-market, new dwelling, unknown county and duplicate rows removed and counted | Pass |
+| TC-401-03 | Outliers (`test_outliers_are_cut_per_county`) | Lowest and highest 1% per county removed | Pass |
+| TC-401-04 | Read a Windows-1252 file (`test_load_raw_reads_cp1252_and_renames`) | Euro sign read, columns renamed | Pass |
+| TC-401-05 | County medians (`test_medians_cover_every_county`, `test_medians_fail_when_a_county_is_missing`) | 26 rows; error if a county has no sales | Pass |
+| TC-401-06 | Generated data (`test_no_missing_values`, `test_values_match_the_api`) | No gaps; every value accepted by the API; all 26 counties | Pass |
+| TC-401-07 | Same seed twice (`test_same_seed_gives_same_data`) | Identical data | Pass |
+| TC-401-08 | Price assumptions (`test_prices_follow_the_assumptions`) | Detached > apartment, A1 > G, Dublin > Donegal | Pass |
 
-- **Wire frame:** M-02 (consumer)
-- **Test cases:**
-- **Design:**
-- **Implementation notes:**
+### US-402 Valuation model that beats a baseline (AI)
 
-### US-410 Calculation module — To be written by AI lead
+- **Wire frame:** not applicable.
+- **Design:** `ai/valuation/train.py`. 80/20 train/test split (seed 11). **Baseline:** median
+  price of the county, computed on the training part only. **Model:** scikit-learn pipeline,
+  one-hot encoding for county, property type and BER (unknown values ignored) plus floor area and
+  bedrooms, into a `GradientBoostingRegressor` (300 trees, depth 3, learning rate 0.05) fitted on
+  log(price), because the price is a product of factors. **Range:** the 10th and 90th percentile
+  of actual / predicted on the test set, so low–high covers 80% of test sales. The script saves
+  `model.joblib` (pipeline, version `gbr-1`, range ratios) and `data/metrics.json`.
+- **Implementation notes:** results on the 4,000 held-out listings:
 
-- **Wire frame:** M-03, W-02 (consumers)
-- **Test cases:**
-- **Design:**
-- **Implementation notes:**
+  | | Baseline (county median) | Model `gbr-1` |
+  |---|---|---|
+  | MAE | €101,074 | **€45,027** (55.5% lower) |
+  | MAPE | 30.9% | **12.5%** |
+  | R² | — | 0.869 |
+
+  Range: 0.82–1.22 × estimate. The model's MAPE is close to the 15% noise put into the data,
+  so it learns almost everything that can be learned from these features. The baseline knows
+  only the county; the model also uses area, type and BER, which is what the comparison shows.
+  Because the features are synthetic, these numbers measure the method, not accuracy on real
+  Irish sales. scikit-learn is pinned to 1.9.1 in `ai/` and `backend/`, since a saved model may
+  not load in another version.
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-402-01 | Train on 2,000 listings (`test_model_beats_baseline`) | Model MAE < baseline MAE | Pass |
+| TC-402-02 | Predict one house (`test_prediction_has_a_range`) | 0 < low < estimate < high, version `gbr-1` | Pass |
+| TC-402-03 | 70 m² vs 180 m² (`test_bigger_house_is_worth_more`) | Bigger house worth more | Pass |
+| TC-402-04 | Train twice (`test_same_seed_gives_same_metrics`) | Same metrics | Pass |
+| TC-402-05 | Unknown county (`test_unknown_category_does_not_crash`) | Estimate returned, no error | Pass |
+| TC-402-06 | Full training, `python -m valuation.train` | Model beats baseline on 4,000 test rows | Pass (table above) |
+
+### US-403 Valuation endpoint (AI)
+
+- **Wire frame:** M-02 (consumer).
+- **Design:** `estimate_value()` in `backend/app/integrations.py` loads `model.joblib` once
+  (`lru_cache`) and calls `valuation.train.predict`. The endpoint itself (`POST /valuations`)
+  did not change: it sets `isStub` from `modelVersion`. If the model file is missing, the old
+  fixed stub is returned with `isStub: true` (UC-F4.1 A2). The Docker image now copies
+  `ai/valuation` (code and model) and the backend installs the same ML library versions as `ai/`.
+- **Implementation notes:** example: Cork, semi-detached, 110 m², 3 bedrooms, B2 →
+  estimate €349,000, range €286,000–€425,000, `modelVersion: "gbr-1"`. Checked inside the
+  running Docker container (`docker compose up --build`; `/health` ok, `estimate_value` returns
+  the numbers above, the raw PPR file is not in the image). Not yet run end to end through the
+  Auth emulator with a real token. `cd backend && pytest -q` → **107 passed**.
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-403-01 | `POST /valuations` with a valid property (`test_valuation_uses_the_model`) | 201, `isStub: false`, `modelVersion: "gbr-1"`, low < estimate < high | Pass |
+| TC-403-02 | Same house in Dublin vs Donegal, 180 vs 70 m² (`test_valuation_depends_on_the_property`) | Dublin and bigger house valued higher | Pass |
+| TC-403-03 | Model file missing (`test_valuation_falls_back_to_stub_without_model`) | Stub returned with `isStub: true` | Pass |
+| TC-403-04 | County "Atlantis", BER "Z9", area 0, bedrooms −1 (`test_valuation_rejects_invalid_input`) | 422 naming the field | Pass |
+| TC-403-05 | Submit an application with the `valuationId` (`test_submit_with_valuation_copies_estimate`) | The model's estimate is copied into the application | Pass |
+| TC-403-06 | Model inside Docker | Same estimate as locally | Pass (checked in the container, not through HTTP) |
+
+### US-410 Tested calculation module (AI)
+
+- **Wire frame:** M-03, W-02 (consumers).
+- **Design:** `ai/calc/`: `MortgageCalculator.compute_metrics(Application)` returns LTI, LTV,
+  DTI, stressed DTI (rate + 2% buffer), monthly repayment and pass/fail checks. LTV uses the lower
+  of asking price and valuation. Limits are one `Limits` dataclass (`calc/config.py`): LTI 4.0
+  first-time / 3.5 subsequent, LTV 90%, DTI 40%, base APR 4%, stress buffer 2%.
+  `Application.from_dict` reads the backend's application document, so the backend calls
+  `compute_metrics()` in `integrations.py` and stores the result in `applications/{id}.metrics`.
+  Core does not calculate these numbers itself.
+- **Implementation notes:** pure Python, standard library only. The backend imports `ai/` through
+  `pythonpath = [".", "../ai"]` (tests) and `PYTHONPATH=/app/ai` (Docker; build context is now
+  the repository root). Example (the application above with the €349,000 valuation): LTI 3.53,
+  LTV 0.96 (fails the 90% limit), DTI 0.24, stressed DTI 0.29, repayment €1,599.34 per month.
+  `cd ai && pytest -q` → **45 passed** (27 of them for this module).
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-410-01 | Repayment, LTI, LTV, DTI on known numbers (`test_repayment_standard`, `test_lti_standard`, `test_ltv_standard`, `test_dti_standard`) | Match hand calculation | Pass |
+| TC-410-02 | LTV with a valuation below the price (`test_property_value_takes_lower`, `test_ltv_with_valuation`) | LTV against the lower value | Pass |
+| TC-410-03 | Zero income (`test_lti_zero_income`, `test_dti_zero_income`, `test_zero_income_fails_checks`) | LTI and DTI null, checks fail, no division error | Pass |
+| TC-410-04 | Subsequent buyer over 3.5× income (`test_subsequent_buyer_fails_lti`) | LTI check fails | Pass |
+| TC-410-05 | Read a backend document (`test_from_dict_reads_every_field`, `test_from_dict_without_valuation`) | All fields read; works without valuation | Pass |
+| TC-410-06 | Submit an application through the API (`test_submit_creates_applied_application`) | `metrics` stored with `lti`, `ltv`, `dti`, `stressedDti`, `monthlyRepayment`, `checks` | Pass |
+| TC-410-07 | API: LTV with and without valuation, zero income (`test_metrics_use_asking_price_without_valuation`, `test_metrics_use_lower_of_price_and_valuation`, `test_metrics_with_zero_income_fail_checks`) | As TC-410-02/03, through the API | Pass |
 
 ## d) Carried to Sprint 2
 

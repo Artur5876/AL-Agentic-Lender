@@ -17,7 +17,9 @@ services:
       - "9099:9099"
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       AL_REPOSITORY: firestore
       AL_AUTH_MODE: firebase

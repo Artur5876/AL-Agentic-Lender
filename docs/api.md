@@ -67,7 +67,7 @@ so the app uses `http://10.0.2.2:8000` (API), `10.0.2.2:9099` (Auth) and `10.0.2
    curl -s -X POST localhost:8000/valuations -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
      -d '{"county":"Cork","floorAreaM2":110,"bedrooms":3,"propertyType":"semi_detached","ber":"B2"}'
-   # -> 201 {"valuationId":"...","estimate":380000.0,...,"modelVersion":"stub-0","isStub":true}
+   # -> 201 {"valuationId":"...","estimate":349000.0,"low":286000.0,"high":425000.0,"modelVersion":"gbr-1","isStub":false}
 
    curl -s -X POST localhost:8000/applications -H "Authorization: Bearer $TOKEN" \
      -H 'Content-Type: application/json' \
@@ -75,7 +75,7 @@ so the app uses `http://10.0.2.2:8000` (API), `10.0.2.2:9099` (Auth) and `10.0.2
           "financials":{"grossAnnualIncome":95000,"monthlyDebts":300,"deposit":60000,"loanAmount":335000,"termYears":30},
           "property":{"county":"Cork","floorAreaM2":110,"bedrooms":3,"propertyType":"semi_detached","ber":"B2","askingPrice":395000},
           "valuationId":"<valuationId from the call above>"}'
-   # -> 201 {"id":"AL-2026-0122",...,"status":"applied","statusLabel":"Applied",...,"metrics":null}
+   # -> 201 {"id":"AL-2026-0122",...,"status":"applied","statusLabel":"Applied",...,"metrics":{"lti":3.5263,"ltv":0.9599,...}}
    ```
 
 4. **Check it landed in Firestore**: open http://localhost:4000/firestore → `applications` →
@@ -111,7 +111,7 @@ underwriters get `role` set by the seed script.
 | Method & path | Who | What | Story |
 |---|---|---|---|
 | `GET /health` | anyone | Is the API up | — |
-| `POST /valuations` | signed in | Property spec → estimate + `valuationId`. **`isStub: true` = fake fixed numbers until the AI model is connected** | US-121, US-403 |
+| `POST /valuations` | signed in | Property spec → `estimate`, `low`, `high` (80% range), `modelVersion` + `valuationId`. **`isStub: true` = the model file is missing and the numbers are fake**; clients decide on this flag, not on the amount | US-121, US-403 |
 | `POST /applications` | borrower | Submit an application → status `applied` | US-112 |
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
 | `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }` | US-302 |
@@ -134,7 +134,9 @@ POST /applications
 ```
 
 Response `201`: the stored application (`id` like `AL-2026-0122`, `status: "applied"`,
-`statusLabel: "Applied"`, `metrics: null` until the calculation module is connected).
+`statusLabel: "Applied"`, `metrics` filled by the calculation module: `lti`, `ltv`, `dti`,
+`stressedDti`, `monthlyRepayment` and `checks` with `ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`.
+`lti` and the DTI values are `null` when income is 0).
 
 ## 4. Errors — always the same shape
 

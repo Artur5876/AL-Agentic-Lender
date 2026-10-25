@@ -100,3 +100,7 @@ venv.bak/
 
 # Claude
 .claude/
+
+# AI raw data (PPR download) and bytecode
+ai/valuation/data/raw/
+**/__pycache__
