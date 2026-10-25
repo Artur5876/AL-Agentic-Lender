@@ -250,8 +250,8 @@ All Core results below come from runs on 25 Oct 2026 on branch `sprint1-core-fin
 
 | TC | Steps | Expected | Result |
 |---|---|---|---|
-| TC-602-01 | Open a pull request | All four jobs run | See PR checks |
-| TC-602-02 | All jobs on the Sprint 1 PR | Green | See PR checks |
+| TC-602-01 | Open a pull request | All four jobs run | Pass (PR #5, Actions run 40192186971) |
+| TC-602-02 | All jobs on the Sprint 1 PR | Green | Pass: ai 10 s, backend 17 s, firebase-rules 49 s, web 23 s |
 | TC-602-03 | Push a commit that breaks a backend test | `backend` job fails, others still pass | Not run |
 
 ### US-101 Register — To be written by Mobile lead
@@ -363,7 +363,7 @@ sprint review.
 | US-211 / US-212 | The LTV column and LTV-band filter need `metrics.ltv`, which stays null for new applications until US-410 is connected; `riskTier` is an open decision (data model §5). Web part itself: owner to confirm. |
 
 Not decided from code (owner to confirm at the review): US-102, US-201, US-202, US-203.
-US-602 counts as done once the CI checks pass on GitHub.
+US-602: all four CI jobs passed on GitHub for PR #5; done once that PR is merged.
 
 ## e) Retrospective
 
