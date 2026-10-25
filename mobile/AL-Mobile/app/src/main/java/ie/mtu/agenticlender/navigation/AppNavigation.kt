@@ -1,6 +1,10 @@
 package ie.mtu.agenticlender.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -8,11 +12,13 @@ import ie.mtu.agenticlender.screens.LoanApplicationScreen
 import ie.mtu.agenticlender.screens.LoginScreen
 import ie.mtu.agenticlender.screens.PropertyCheckerScreen
 import ie.mtu.agenticlender.screens.RegisterScreen
+import ie.mtu.agenticlender.api.ValuationDraft
 
 @Composable
 fun AppNavigation() {
 
     val navController = rememberNavController()
+    var valuationDraft by remember { mutableStateOf<ValuationDraft?>(null) }
 
     NavHost(
         navController = navController,
@@ -50,7 +56,8 @@ fun AppNavigation() {
         composable("propertyChecker") {
 
             PropertyCheckerScreen(
-                onContinue = {
+                onContinue = { draft ->
+                    valuationDraft = draft
                     navController.navigate("loanApplication")
                 }
             )
@@ -58,7 +65,7 @@ fun AppNavigation() {
 
         composable("loanApplication") {
 
-            LoanApplicationScreen()
+            LoanApplicationScreen(valuationDraft = valuationDraft)
         }
     }
 }

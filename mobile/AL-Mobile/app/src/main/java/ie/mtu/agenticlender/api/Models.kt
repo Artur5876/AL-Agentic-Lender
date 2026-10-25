@@ -44,5 +44,26 @@ data class ApplicationRequest(
 data class ApplicationResponse(
     val id: String,
     val status: String,
-    val statusLabel: String
+    val statusLabel: String,
+    val reference: String? = null
+)
+
+data class ValuationDraft(
+    val valuation: ValuationResponse,
+    val property: Property
+)
+
+data class ApiErrorDetail(
+    val field: String,
+    val message: String
+)
+
+data class ApiErrorBody(
+    val code: String,
+    val message: String,
+    val details: List<ApiErrorDetail>? = null
+)
+
+data class ApiErrorResponse(
+    val error: ApiErrorBody
 )

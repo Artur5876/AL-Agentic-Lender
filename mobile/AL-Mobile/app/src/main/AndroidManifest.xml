@@ -16,12 +16,10 @@
         android:theme="@style/Theme.ALMobile"
         android:usesCleartextTraffic="true">
 
-        <!--
-        */ <provider
+        <provider
             android:name="com.google.firebase.provider.FirebaseInitProvider"
             android:authorities="${applicationId}.firebaseinitprovider"
             tools:node="remove" />
-        -->
 
 
         <activity
