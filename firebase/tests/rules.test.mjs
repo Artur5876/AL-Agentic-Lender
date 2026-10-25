@@ -92,6 +92,14 @@ describe('users', () => {
     assertFails(setDoc(doc(newbie(), 'users/other'), profile({ uid: 'other' }))));
   test('cannot add extra fields', () =>
     assertFails(setDoc(doc(newbie(), 'users/newbie'), profile({ isAdmin: true }))));
+  // The exact map the mobile RegisterScreen sends today (uid, email, role only).
+  test('mobile register payload without displayName/createdAt is rejected', () =>
+    assertFails(setDoc(doc(newbie(), 'users/newbie'),
+      { uid: 'newbie', email: 'newbie@example.com', role: 'borrower' })));
+  test('createdAt from the phone clock instead of serverTimestamp is rejected', () =>
+    assertFails(setDoc(doc(newbie(), 'users/newbie'), profile({ createdAt: new Date() }))));
+  test('email different from the sign-in token is rejected', () =>
+    assertFails(setDoc(doc(newbie(), 'users/newbie'), profile({ email: 'Newbie@Example.com' }))));
   test('cannot change own role later', () =>
     assertFails(updateDoc(doc(borrower(), 'users/aoife'), { role: 'underwriter' })));
   test('can change own display name', () =>
