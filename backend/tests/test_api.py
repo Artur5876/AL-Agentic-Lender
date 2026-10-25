@@ -93,7 +93,8 @@ def test_submit_creates_applied_application(client):
     assert app["borrowerId"] == "borrower-aoife"
     assert app["brokerId"] == "broker-ciaran"
     assert app["statusHistory"][0]["status"] == "applied"
-    assert app["metrics"] is None  # filled by US-410 later, never by Core
+    assert set(app["metrics"]) == {"lti", "ltv", "dti", "stressedDti",
+                                   "monthlyRepayment", "checks"}
 
 
 def test_references_are_sequential(client):
@@ -106,6 +107,32 @@ def test_submit_with_valuation_copies_estimate(client):
     app = submit(client, body={**APPLICATION, "valuationId": vid}).json()
     assert app["valuation"]["valuationId"] == vid
     assert app["valuation"]["estimate"] == 380000
+
+
+# ---------- metrics (US-410) ----------
+
+def test_metrics_use_asking_price_without_valuation(client):
+    m = submit(client).json()["metrics"]
+    assert m["ltv"] == pytest.approx(335000 / 395000, abs=1e-4)
+    assert m["lti"] == pytest.approx(335000 / 95000, abs=1e-2)
+    assert m["monthlyRepayment"] > 0
+    assert m["checks"]["ltvOk"] is True
+
+
+def test_metrics_use_lower_of_price_and_valuation(client):
+    # stub estimate 380 000 is below the asking price 395 000, so LTV is taken against it
+    vid = client.post("/valuations", json=PROPERTY, headers=BORROWER).json()["valuationId"]
+    m = submit(client, body={**APPLICATION, "valuationId": vid}).json()["metrics"]
+    assert m["ltv"] == pytest.approx(335000 / 380000, abs=1e-4)
+
+
+def test_metrics_with_zero_income_fail_checks(client):
+    body = {**APPLICATION, "financials": {**APPLICATION["financials"], "grossAnnualIncome": 0}}
+    r = submit(client, body=body)
+    assert r.status_code == 201
+    m = r.json()["metrics"]
+    assert m["lti"] is None and m["dti"] is None and m["stressedDti"] is None
+    assert not m["checks"]["ltiOk"] and not m["checks"]["dtiOk"]
 
 
 def test_cannot_use_someone_elses_valuation(client):

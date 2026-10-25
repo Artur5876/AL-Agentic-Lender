@@ -6,7 +6,11 @@ calculation module are still being built.
 
 from __future__ import annotations
 
+from calc.metrics import MortgageCalculator
+from common.app import Application
+
 STUB_MODEL_VERSION = "stub-0"
+_calculator = MortgageCalculator()
 
 
 def estimate_value(property_spec: dict) -> dict:
@@ -24,11 +28,6 @@ def estimate_value(property_spec: dict) -> dict:
     }
 
 
-def compute_metrics(application: dict) -> dict | None:
-    """Placeholder for the calculation module (US-410, AI lead).
-
-    Must return {"lti", "ltv", "dti", "stressedDti", "monthlyRepayment"} computed by
-    tested Python code. Returns None until US-410 is connected, so the clients show "—".
-    Core does not calculate these itself, so there is exactly one source of the numbers.
-    """
-    return None
+def compute_metrics(application: dict) -> dict:
+    """Calculation module (US-410, AI lead): LTI, LTV, DTI, stressed DTI, repayment, checks."""
+    return _calculator.compute_metrics(Application.from_dict(application)).to_dict()

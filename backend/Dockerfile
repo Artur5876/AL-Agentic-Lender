@@ -1,7 +1,10 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app ./app
+COPY backend/app ./app
+COPY ai/calc ./ai/calc
+COPY ai/common ./ai/common
+ENV PYTHONPATH=/app/ai
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

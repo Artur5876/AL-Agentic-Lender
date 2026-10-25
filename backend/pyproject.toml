@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "../ai"]
 testpaths = ["tests"]
 
 [tool.ruff]
