@@ -12,10 +12,18 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
+import com.google.firebase.firestore.FieldValue
+import android.util.Patterns
+
+
 @Composable
-fun RegisterScreen() {
+fun RegisterScreen(
+    onRegisterSuccess: () -> Unit,
+    onBackToLogin: () -> Unit
+) {
 
     var email by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
 
@@ -38,6 +46,15 @@ fun RegisterScreen() {
         )
 
         Spacer(modifier = Modifier.height(30.dp))
+
+        OutlinedTextField(
+            value = displayName,
+            onValueChange = {
+                displayName = it
+            },
+            label = { Text("Display Name") },
+            modifier = Modifier.fillMaxWidth()
+        )
 
         OutlinedTextField(
             value = email,
@@ -80,12 +97,14 @@ fun RegisterScreen() {
 
                 when {
 
+                    displayName.isBlank() ->
+                        errorMessage = "Display name is required"
+
                     email.isBlank() ->
                         errorMessage = "Email is required"
 
-                    !android.util.Patterns.EMAIL_ADDRESS
-                        .matcher(email)
-                        .matches() ->
+                    !Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+                        .matches(email) ->
                         errorMessage = "Enter a valid email address"
 
                     password.isBlank() ->
@@ -121,13 +140,16 @@ fun RegisterScreen() {
                                         mapOf(
                                             "uid" to uid,
                                             "email" to email,
-                                            "role" to "borrower"
+                                            "displayName" to displayName,
+                                            "role" to "borrower",
+                                            "createdAt" to FieldValue.serverTimestamp()
                                         )
                                     )
                                     .addOnSuccessListener {
 
                                         successMessage =
                                             "Account created successfully."
+                                        onRegisterSuccess()
 
                                     }
                                     .addOnFailureListener { e ->
@@ -152,6 +174,17 @@ fun RegisterScreen() {
         ) {
 
             Text("Register")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                onBackToLogin()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Back to Login")
         }
 
         Spacer(modifier = Modifier.height(16.dp))

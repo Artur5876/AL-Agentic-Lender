@@ -1,21 +1,35 @@
 package ie.mtu.agenticlender.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import com.google.firebase.auth.FirebaseAuth
+import ie.mtu.agenticlender.api.Property
+import ie.mtu.agenticlender.api.RetrofitClient
+import ie.mtu.agenticlender.api.ValuationDraft
+import ie.mtu.agenticlender.api.ValuationResponse
+import ie.mtu.agenticlender.api.ValuationRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PropertyCheckerScreen() {
+fun PropertyCheckerScreen(
+    onContinue: (ValuationDraft) -> Unit
+) {
 
     var county by remember { mutableStateOf("") }
     var floorArea by remember { mutableStateOf("") }
     var bedrooms by remember { mutableStateOf("") }
+    var askingPrice by remember { mutableStateOf("") }
     var propertyType by remember { mutableStateOf("") }
     var ber by remember { mutableStateOf("") }
-    var askingPrice by remember { mutableStateOf("") }
 
     var estimate by remember { mutableStateOf("") }
     var lowEstimate by remember { mutableStateOf("") }
@@ -29,6 +43,18 @@ fun PropertyCheckerScreen() {
 
     var modelVersion by remember { mutableStateOf("") }
     var valuationId by remember { mutableStateOf("") }
+    var valuationResponse by remember { mutableStateOf<ValuationResponse?>(null) }
+
+    val scope = rememberCoroutineScope()
+
+    fun clearValuation() {
+        valuationResponse = null
+        estimate = ""
+        lowEstimate = ""
+        highEstimate = ""
+        modelVersion = ""
+        valuationId = ""
+    }
 
     val counties = listOf(
         "Carlow",
@@ -79,6 +105,7 @@ fun PropertyCheckerScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
 
@@ -114,6 +141,7 @@ fun PropertyCheckerScreen() {
                         text = { Text(countyItem) },
                         onClick = {
                             county = countyItem
+                            clearValuation()
                             countyExpanded = false
                         }
                     )
@@ -125,7 +153,10 @@ fun PropertyCheckerScreen() {
 
         OutlinedTextField(
             value = floorArea,
-            onValueChange = { floorArea = it },
+            onValueChange = {
+                floorArea = it
+                clearValuation()
+            },
             label = { Text("Floor Area (m²)") },
             modifier = Modifier.fillMaxWidth()
         )
@@ -134,8 +165,23 @@ fun PropertyCheckerScreen() {
 
         OutlinedTextField(
             value = bedrooms,
-            onValueChange = { bedrooms = it },
+            onValueChange = {
+                bedrooms = it
+                clearValuation()
+            },
             label = { Text("Bedrooms") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = askingPrice,
+            onValueChange = {
+                askingPrice = it
+                clearValuation()
+            },
+            label = { Text("Asking Price (€)") },
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -166,6 +212,7 @@ fun PropertyCheckerScreen() {
                         text = { Text(type) },
                         onClick = {
                             propertyType = type
+                            clearValuation()
                             propertyExpanded = false
                         }
                     )
@@ -200,6 +247,7 @@ fun PropertyCheckerScreen() {
                         text = { Text(rating) },
                         onClick = {
                             ber = rating
+                            clearValuation()
                             berExpanded = false
                         }
                     )
@@ -207,34 +255,23 @@ fun PropertyCheckerScreen() {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = askingPrice,
-            onValueChange = { askingPrice = it },
-            label = { Text("Asking Price (€)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
-
                 errorMessage = ""
-
                 estimate = ""
                 lowEstimate = ""
                 highEstimate = ""
                 modelVersion = ""
                 valuationId = ""
+                valuationResponse = null
 
                 if (county.isBlank()) {
                     errorMessage = "County is required"
                 }
                 else if (
-                    floorArea.toIntOrNull() == null ||
-                    floorArea.toInt() <= 0
+                    floorArea.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } == null
                 ) {
                     errorMessage =
                         "Floor area must be greater than 0"
@@ -253,31 +290,62 @@ fun PropertyCheckerScreen() {
                     errorMessage = "BER rating is required"
                 }
                 else if (
-                    askingPrice.toDoubleOrNull() == null ||
-                    askingPrice.toDouble() <= 0
+                    askingPrice.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } == null
                 ) {
-                    errorMessage =
-                        "Asking price must be greater than 0"
+                    errorMessage = "Asking price must be greater than 0"
                 }
+
+
                 else {
 
                     loading = true
+                    scope.launch(Dispatchers.IO) {
 
-                    /*
-                     * US-121 API PLACEHOLDER
-                     */
+                        try {
 
-                    estimate = "€380,000"
+                            val idToken = FirebaseAuth.getInstance().currentUser
+                                ?.getIdToken(false)
+                                ?.await()
+                                ?.token
+                                ?: throw IllegalStateException("Sign in before requesting a valuation.")
 
-                    lowEstimate = "€360,000"
+                            val response =
+                                RetrofitClient.api.createValuation(
+                                    "Bearer $idToken",
+                                    ValuationRequest(
+                                        county = county,
+                                        floorAreaM2 = floorArea.toDouble(),
+                                        bedrooms = bedrooms.toInt(),
+                                        propertyType = propertyType,
+                                        ber = ber
+                                    )
+                                )
 
-                    highEstimate = "€400,000"
+                            if (response.isSuccessful) {
 
-                    modelVersion = "seed"
+                                response.body()?.let {
 
-                    valuationId = "AL-VAL-DEMO"
+                                    estimate = "€${it.estimate}"
+                                    lowEstimate = "€${it.low}"
+                                    highEstimate = "€${it.high}"
+                                    modelVersion = it.modelVersion
+                                    valuationId = it.valuationId
+                                    valuationResponse = it
+                                }
 
-                    loading = false
+                            } else {
+
+                                errorMessage =
+                                    "API Error ${response.code()}"
+                            }
+
+                        } catch (e: Exception) {
+
+                            errorMessage = e.toString()
+                        } finally {
+                            loading = false
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -341,6 +409,34 @@ fun PropertyCheckerScreen() {
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                val valuation = valuationResponse
+                if (valuation == null) {
+                    errorMessage = "Get a valuation before continuing."
+                } else {
+                    onContinue(
+                        ValuationDraft(
+                            valuation = valuation,
+                            property = Property(
+                                county = county,
+                                floorAreaM2 = floorArea.toDouble(),
+                                bedrooms = bedrooms.toInt(),
+                                propertyType = propertyType,
+                                ber = ber,
+                                askingPrice = askingPrice.toDouble()
+                            )
+                        )
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Continue to Loan Application")
         }
     }
 }
