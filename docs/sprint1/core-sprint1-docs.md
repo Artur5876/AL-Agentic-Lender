@@ -1,8 +1,8 @@
-# Sprint 1 documentation — Core stories (DRAFT)
+# Sprint 1 documentation — Core stories
 
-Paste-ready sections for the Sprint 1 document, keyed by story ID. **Draft:** fill the "Result"
-columns only after the team has run the tests, and edit wording so it matches what was actually
-built and by whom. Check the module's AI-use rules before this goes into a graded submission.
+Sprint 1 story notes reflect the implemented Android client and local emulator integration. Test
+results below record the evidence currently reported for the local stack; repeat them in the
+submission environment if formal test artefacts are required.
 
 ## Use cases
 
@@ -31,6 +31,123 @@ built and by whom. Check the module's AI-use rules before this goes into a grade
 | **Actor** | Developer |
 | **Main flow** | 1. Clone repo. 2. `docker compose up --build`. 3. Run seed script. 4. Open emulator UI, API docs, chain RPC. |
 | **Alternative flow** | Port in use → change the port mapping in `docker-compose.yml`. |
+
+## US-101 Register
+
+### Design
+
+- Collect display name, email, password, and password confirmation.
+- Create the Firebase Authentication account first, then write `users/{uid}` in Firestore.
+- The profile contains only `uid`, `email`, `displayName`, `role: "borrower"`, and
+  `createdAt: FieldValue.serverTimestamp()`. Firestore rules enforce ownership, token email,
+  borrower role, allowed fields, and server timestamp.
+
+### Implementation Notes
+
+- Registration uses Firebase Authentication and Firestore Emulator in local development.
+- Client validation checks required display name/email/password, email format, password strength
+  (minimum eight characters), and confirmation match. Firebase duplicate-account errors are
+  presented as registration failures.
+- Successful profile creation completes registration and navigates into the app. Firestore profile
+  creation failure is displayed to the user.
+
+### Test Cases
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-101-01 | Register with a valid name, email, and matching strong password | Auth account is created and app continues | Verified against local Firebase Auth Emulator |
+| TC-101-02 | Inspect `users/{uid}` in Firestore Emulator | Document ID and `uid` match; `email`, `displayName`, borrower `role`, and server `createdAt` are present | Profile creation and required fields verified |
+| TC-101-03 | Submit blank/invalid email, weak password, or mismatched confirmation | Registration is blocked and a validation message is shown | Client validation implemented |
+| TC-101-04 | Register an email already in use | Duplicate account is rejected with an error | Duplicate-account handling implemented |
+
+## US-102 Login / Logout
+
+### Design
+
+- Authenticate borrowers with Firebase Authentication; local development routes Auth through the
+  Firebase Auth Emulator.
+- Keep the Firebase Auth session in the SDK and provide a logout action that signs out the current
+  user.
+
+### Implementation Notes
+
+- Login validates required credentials and email format, calls
+  `signInWithEmailAndPassword`, and reports invalid credentials separately from network failures.
+- Logout calls `FirebaseAuth.signOut()`. Firebase Auth session persistence is provided by the SDK.
+- The documented demo account `aoife@example.com` / `al-demo-pass` was used for local login
+  verification.
+
+
+### Test Cases
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-102-01 | Sign in with `aoife@example.com` / `al-demo-pass` against Auth Emulator | Sign-in succeeds and app enters the authenticated flow | Verified |
+| TC-102-02 | Sign in with an invalid email/password pair | User remains signed out and sees an invalid-credentials message | Handling implemented |
+| TC-102-03 | Restart the app after successful sign-in | Firebase Auth retains the session | Session persistence reported; authenticated-route restoration remains a navigation caveat |
+| TC-102-04 | Use logout and inspect the Firebase Auth current user | `signOut()` clears the authenticated user | Sign-out call implemented; signed-in logout placement/route behavior needs confirmation |
+
+## US-112 Submit Loan Application
+
+### Design
+
+- Require a successful Property Checker valuation before application submission.
+- Carry the valuation and entered property details into the application form.
+- Send borrower type, financials, property details, and the returned `valuationId` to
+  `POST /applications`, authenticated with `Authorization: Bearer <Firebase ID token>`.
+- Display the API-returned application reference, status, and status label.
+
+### Implementation Notes
+
+- `POST /applications` is integrated; this is no longer an unimplemented Sprint 1 item.
+- The application client obtains a Firebase ID token before submission. The backend verifies the
+  token, validates the payload, checks that an included valuation belongs to the borrower, persists
+  the application, and returns the created record.
+- The form validates buyer type and financial inputs, prevents repeat submission while loading, and
+  displays API error messages and financial-field validation details.
+- End-to-end testing confirmed successful authenticated submission using POST /applications. Docker logs 
+  verified HTTP 201 Created responses and application creation with status "applied".
+
+### Test Cases
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-112-01 | Sign in, obtain a valuation, enter valid financials, and submit | Authenticated `POST /applications` returns `201` | Verified in Docker logs |
+| TC-112-02 | Inspect the response | Application reference, `status: "applied"`, and `statusLabel: "Applied"` are returned and shown | Successful response and applied status verified |
+| TC-112-03 | Submit without required/valid input or with an invalid API constraint | Submission is blocked locally or API returns structured `422` details | Client and backend validation implemented |
+| TC-112-04 | Submit a valuation ID not owned by the signed-in borrower | API rejects it with `400 bad_valuation` | Backend ownership validation implemented |
+
+## US-121 Property Checker
+
+### Design
+
+- Collect county, floor area, bedrooms, property type, BER rating, and asking price.
+- Validate the property details, then call authenticated `POST /valuations`.
+- Retain the returned valuation ID and valuation figures with the entered property details for the
+  subsequent application flow.
+
+### Implementation Notes
+
+- The Property Checker is integrated with the FastAPI `POST /valuations` endpoint; it does not
+  submit placeholder valuation data.
+- Client validation covers county, BER rating, floor area, bedrooms, and asking price. The API
+  validates allowed counties/property types/BER ratings and numeric limits.
+- The response fields are `valuationId`, `estimate`, `low`, `high`, `modelVersion`, and `isStub`.
+  The mobile client displays the valuation figures and ID, and carries the result into US-112.
+  `isStub` is returned by the API; the current Property Checker does not display that flag in its UI.
+- Docker logs report `POST /valuations` returning `201 Created`. The verified local example returned
+  estimate `380000`, low `360000`, high `400000`, model version `stub-0`, and `isStub: true`.
+- The Property Checker integration is complete. The backend currently returns stub valuation values
+  (isStub=true, modelVersion="stub-0") pending completion of US-403. 
+
+### Test Cases
+
+| TC | Steps | Expected | Result |
+|---|---|---|---|
+| TC-121-01 | Enter valid property details and request a valuation | Authenticated `POST /valuations` returns `201` and a valuation ID | Verified in Docker logs |
+| TC-121-02 | Inspect/display the response | ID, estimate, low/high range, model version, and stub flag are available | Values verified; local result has `isStub: true` |
+| TC-121-03 | Omit/enter invalid county, BER, floor area, bedroom count, or asking price | Client blocks invalid input or API returns a structured validation error | Client validation implemented; API validates its schema |
+| TC-121-04 | Edit property input after receiving a valuation | Stale result is cleared; a new valuation is required before continuing | Implemented in Property Checker |
 
 ## US-301 Documented Firestore data model
 
@@ -103,3 +220,14 @@ built and by whom. Check the module's AI-use rules before this goes into a grade
 | TC-341-01 | Fresh clone, `docker compose up --build` on each member's machine | Emulator UI :4000, API :8000/docs, chain :8545 respond | |
 | TC-341-02 | `python scripts/seed_emulator.py` | 10 users and 7 applications visible in Emulator UI | |
 | TC-341-03 | `curl -X POST localhost:8545 -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"eth_chainId","id":1}'` | Result `0x7a69` (31337) | |
+
+## Carried to Sprint 2
+
+- **US-403 valuation model integration:** US-121 now calls `POST /valuations` and carries its
+  response through the application flow, but the local API still reports `isStub: true` with model
+  version `stub-0`. Replacing the stub estimate with the production model remains outstanding.
+- **US-410 metrics calculation:** application metrics remain `null` until the calculation module is
+  connected, as described in `docs/data-model.md`.
+- **US-102 navigation follow-through:** confirm whether restored sessions should bypass the login
+  route and whether logout should navigate to a signed-out screen. The SDK sign-out call exists, but
+  the current navigation placement does not yet demonstrate that full UX.

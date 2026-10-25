@@ -4,13 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import ie.mtu.agenticlender.screens.LoginScreen
-import ie.mtu.agenticlender.ui.theme.ALMobileTheme
 import ie.mtu.agenticlender.firebase.FirebaseConfig
-import ie.mtu.agenticlender.screens.RegisterScreen
+import ie.mtu.agenticlender.navigation.AppNavigation
+import ie.mtu.agenticlender.ui.theme.ALMobileTheme
 import com.google.firebase.auth.FirebaseAuth
-import ie.mtu.agenticlender.screens.LoanApplicationScreen
-import ie.mtu.agenticlender.screens.PropertyCheckerScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -28,13 +25,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ALMobileTheme {
-
-                // RegisterScreen()
-                // LoanApplicationScreen()
-                // LoginScreen()
-                PropertyCheckerScreen()
-                // LoanApplicationScreen()
-
+                AppNavigation()
             }
         }
     }
