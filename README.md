@@ -40,7 +40,21 @@ python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\
 pip install -r requirements-dev.txt
 export AL_REPOSITORY=firestore AL_DEFAULT_BROKER_UID=broker-ciaran
 export FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+export PYTHONPATH=../ai          # calculation module + valuation model; Windows: $env:PYTHONPATH="../ai"
 uvicorn app.main:app --reload
+```
+
+### Rebuild the valuation data and model (AI, optional)
+
+The trained model (`ai/valuation/model.joblib`) and its data are committed, so this is only
+needed to change them. Download `PPR-2025.csv` from propertypriceregister.ie into
+`ai/valuation/data/raw/` (not committed), then:
+
+```bash
+cd ai && pip install -r requirements.txt
+python -m valuation.ppr        # clean PPR -> data/county_medians.csv
+python -m valuation.generate   # synthetic listings -> data/listings.csv
+python -m valuation.train      # model.joblib + data/metrics.json (MAE vs county baseline)
 ```
 
 ### Seed demo data (after the emulators are running)
@@ -62,10 +76,12 @@ Creates fictional users (password `al-demo-pass`, emulator only) and the 7 appli
 
 ```bash
 cd backend && pytest -q            # state machine + API (no Firebase needed)
+cd ai && pytest -q                 # calculation module, PPR cleaning, synthetic data, model
 cd firebase && npm run test:rules  # security rules against the Firestore emulator (needs Java 21+)
 ```
 
-GitHub Actions runs both on every pull request (`.github/workflows/ci.yml`).
+Run each from its own folder: the import paths are set in that folder's `pyproject.toml`.
+GitHub Actions runs all of them, plus the web build, on every pull request (`.github/workflows/ci.yml`).
 
 ## Rules for everyone
 

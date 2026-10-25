@@ -1,7 +1,7 @@
-"""Connection points to the AI lead's code. Core calls these; the AI lead replaces the bodies.
+"""Connection points to the AI lead's code (ai/ folder). Core calls these; the AI lead owns them.
 
-Keeping them here means the API contract (US-311) is stable while the ML model and
-calculation module are still being built.
+Keeping them here means the API contract (US-311) stays stable when the valuation model
+(US-402/403) or the calculation module (US-410) changes.
 """
 
 from __future__ import annotations
