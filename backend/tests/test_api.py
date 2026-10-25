@@ -9,6 +9,7 @@ import threading
 import pytest
 from fastapi.testclient import TestClient
 
+from app import integrations
 from app.config import Settings
 from app.lifecycle import Actor, Status
 from app.main import create_app
@@ -65,11 +66,30 @@ def test_token_cannot_claim_system_role(client):
 
 # ---------- valuations ----------
 
-def test_valuation_returns_stub_flag(client):
-    r = client.post("/valuations", json=PROPERTY, headers=BORROWER)
+def valuate(client, **changes):
+    r = client.post("/valuations", json={**PROPERTY, **changes}, headers=BORROWER)
     assert r.status_code == 201
-    body = r.json()
-    assert body["isStub"] is True and body["valuationId"]
+    return r.json()
+
+
+def test_valuation_uses_the_model(client):
+    body = valuate(client)
+    assert body["isStub"] is False and body["valuationId"]
+    assert body["modelVersion"] == "gbr-1"
+    assert 0 < body["low"] < body["estimate"] < body["high"]
+
+
+def test_valuation_depends_on_the_property(client):
+    dublin, donegal = valuate(client, county="Dublin"), valuate(client, county="Donegal")
+    assert dublin["estimate"] > donegal["estimate"]
+    big, small = valuate(client, floorAreaM2=180), valuate(client, floorAreaM2=70)
+    assert big["estimate"] > small["estimate"]
+
+
+def test_valuation_falls_back_to_stub_without_model(client, monkeypatch):
+    monkeypatch.setattr(integrations, "_load_model", lambda: None)
+    body = valuate(client)
+    assert body["isStub"] is True and body["estimate"] == 380000
 
 
 @pytest.mark.parametrize("field,value", [("county", "Atlantis"), ("ber", "Z9"),
@@ -103,10 +123,11 @@ def test_references_are_sequential(client):
 
 
 def test_submit_with_valuation_copies_estimate(client):
-    vid = client.post("/valuations", json=PROPERTY, headers=BORROWER).json()["valuationId"]
+    valuation = valuate(client)
+    vid = valuation["valuationId"]
     app = submit(client, body={**APPLICATION, "valuationId": vid}).json()
     assert app["valuation"]["valuationId"] == vid
-    assert app["valuation"]["estimate"] == 380000
+    assert app["valuation"]["estimate"] == valuation["estimate"]
 
 
 # ---------- metrics (US-410) ----------
@@ -120,10 +141,10 @@ def test_metrics_use_asking_price_without_valuation(client):
 
 
 def test_metrics_use_lower_of_price_and_valuation(client):
-    # stub estimate 380 000 is below the asking price 395 000, so LTV is taken against it
-    vid = client.post("/valuations", json=PROPERTY, headers=BORROWER).json()["valuationId"]
-    m = submit(client, body={**APPLICATION, "valuationId": vid}).json()["metrics"]
-    assert m["ltv"] == pytest.approx(335000 / 380000, abs=1e-4)
+    valuation = valuate(client)
+    body = {**APPLICATION, "valuationId": valuation["valuationId"]}
+    m = submit(client, body=body).json()["metrics"]
+    assert m["ltv"] == pytest.approx(335000 / min(395000, valuation["estimate"]), abs=1e-4)
 
 
 def test_metrics_with_zero_income_fail_checks(client):

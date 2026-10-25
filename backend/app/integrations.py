@@ -5,7 +5,11 @@ calculation module are still being built.
 """
 
 from __future__ import annotations
+from functools import lru_cache
 
+import joblib
+
+from valuation.train import MODEL_PATH, predict
 from calc.metrics import MortgageCalculator
 from common.app import Application
 
@@ -13,20 +17,25 @@ STUB_MODEL_VERSION = "stub-0"
 _calculator = MortgageCalculator()
 
 
+@lru_cache(maxsize=1)
+def _load_model() -> dict | None:
+    """Load the trained valuation model once; None if model.joblib is missing."""
+    if not MODEL_PATH.exists():
+        return None
+    return joblib.load(MODEL_PATH)
+
+
 def estimate_value(property_spec: dict) -> dict:
-    """Placeholder for the valuation model (US-402 / US-403, AI lead).
-
-    Returns FIXED fake numbers so the mobile property checker (US-121) can be built.
-    They do not depend on the input and must never be shown as a real estimate.
-    Replace with: load the trained model once, predict, return the same keys.
-    """
-    return {
-        "estimate": 380000.0,
-        "low": 360000.0,
-        "high": 400000.0,
-        "modelVersion": STUB_MODEL_VERSION,
-    }
-
+    """Valuation model (US-402 / US-403, AI lead). Falls back to the stub without a model."""
+    bundle = _load_model()
+    if bundle is None:
+        return {
+            "estimate": 380000.0,
+            "low": 360000.0,
+            "high": 400000.0,
+            "modelVersion": STUB_MODEL_VERSION,
+        }
+    return predict(bundle, property_spec)
 
 def compute_metrics(application: dict) -> dict:
     """Calculation module (US-410, AI lead): LTI, LTV, DTI, stressed DTI, repayment, checks."""
