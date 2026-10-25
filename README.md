@@ -73,3 +73,8 @@ GitHub Actions runs both on every pull request (`.github/workflows/ci.yml`).
 - Never commit `.env`, service-account JSON files, API keys or wallet keys. Copy `.env.example`.
 - Synthetic data only. Stripe test mode only.
 - Read `docs/data-model.md` before writing to Firestore, and `docs/api.md` before calling the API.
+
+## AI assistance
+
+Parts of this project were written with Claude Code. All AI-assisted code and documents were
+reviewed, tested and approved by the team member who committed them.
