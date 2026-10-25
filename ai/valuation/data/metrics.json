@@ -1,0 +1,13 @@
+{
+  "modelVersion": "gbr-1",
+  "trainRows": 16000,
+  "testRows": 4000,
+  "maeBaseline": 101074,
+  "maeModel": 45027,
+  "improvement": 0.555,
+  "mapeBaseline": 0.309,
+  "mapeModel": 0.125,
+  "r2Model": 0.869,
+  "lowRatio": 0.819,
+  "highRatio": 1.215
+}
