@@ -6,16 +6,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import com.google.firebase.auth.FirebaseAuth
+import ie.mtu.agenticlender.api.RetrofitClient
+import ie.mtu.agenticlender.api.ValuationRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PropertyCheckerScreen() {
+fun PropertyCheckerScreen(
+    onContinue: () -> Unit
+) {
 
     var county by remember { mutableStateOf("") }
     var floorArea by remember { mutableStateOf("") }
     var bedrooms by remember { mutableStateOf("") }
     var propertyType by remember { mutableStateOf("") }
     var ber by remember { mutableStateOf("") }
-    var askingPrice by remember { mutableStateOf("") }
 
     var estimate by remember { mutableStateOf("") }
     var lowEstimate by remember { mutableStateOf("") }
@@ -29,6 +36,8 @@ fun PropertyCheckerScreen() {
 
     var modelVersion by remember { mutableStateOf("") }
     var valuationId by remember { mutableStateOf("") }
+
+    val scope = rememberCoroutineScope()
 
     val counties = listOf(
         "Carlow",
@@ -207,21 +216,12 @@ fun PropertyCheckerScreen() {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = askingPrice,
-            onValueChange = { askingPrice = it },
-            label = { Text("Asking Price (€)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
-
-                errorMessage = ""
+                errorMessage = "BUTTON CLICKED"
+                println("BUTTON CLICKED")
 
                 estimate = ""
                 lowEstimate = ""
@@ -252,32 +252,141 @@ fun PropertyCheckerScreen() {
                 else if (ber.isBlank()) {
                     errorMessage = "BER rating is required"
                 }
-                else if (
-                    askingPrice.toDoubleOrNull() == null ||
-                    askingPrice.toDouble() <= 0
-                ) {
-                    errorMessage =
-                        "Asking price must be greater than 0"
-                }
+
+
                 else {
 
                     loading = true
+                    println("VALIDATION PASSED")
 
-                    /*
-                     * US-121 API PLACEHOLDER
-                     */
+                    scope.launch(Dispatchers.IO) {
 
-                    estimate = "€380,000"
+                        try {
 
-                    lowEstimate = "€360,000"
+                            /*
+                            val tokenResult =
+                                FirebaseAuth.getInstance()
+                                    .currentUser
+                                    ?.getIdToken(false)
 
-                    highEstimate = "€400,000"
+                            tokenResult?.addOnSuccessListener { token ->
 
-                    modelVersion = "seed"
+                                scope.launch {
 
-                    valuationId = "AL-VAL-DEMO"
+                                    try {
+                                        println("CALLING /valuations")
+                                        val response =
 
-                    loading = false
+                                            RetrofitClient.api.createValuation(
+                                                "Bearer ${token.token}",
+                                                ValuationRequest(
+                                                    county = county,
+                                                    floorAreaM2 = floorArea.toDouble(),
+                                                    bedrooms = bedrooms.toInt(),
+                                                    propertyType = propertyType,
+                                                    ber = ber
+                                                )
+                                            )
+                                        println("VALUATION RESPONSE CODE = ${response.code()}")
+
+                                        if (response.isSuccessful) {
+
+                                            response.body()?.let {
+
+                                                estimate = "€${it.estimate}"
+                                                lowEstimate = "€${it.low}"
+                                                highEstimate = "€${it.high}"
+                                                modelVersion = it.modelVersion
+                                                valuationId = it.valuationId
+                                                println("VALUATION SUCCESS")
+                                                println(it)
+                                            }
+
+                                        } else {
+                                            errorMessage =
+                                                "API Error ${response.code()}"
+                                        }
+
+                                    } catch (e: Exception) {
+
+                                        errorMessage =
+                                            e.message ?: "Unknown error"
+                                    }
+
+                                    loading = false
+                                }
+                            }
+                            */
+
+                            println("Current user = ${FirebaseAuth.getInstance().currentUser}")
+                            println("Email = ${FirebaseAuth.getInstance().currentUser?.email}")
+
+                            println("CALLING /valuations")
+
+                            println("Current user: ${FirebaseAuth.getInstance().currentUser?.email}")
+                            println("Request county: $county")
+                            println("Request area: $floorArea")
+
+                            println("THREAD = ${Thread.currentThread().name}")
+
+                            println("Current user = ${FirebaseAuth.getInstance().currentUser?.email}")
+                            println("Thread = ${Thread.currentThread().name}")
+
+                            println("CALLING /health via Retrofit...")
+                            try {
+                                val healthResponse = RetrofitClient.api.health()
+                                println("HEALTH RESPONSE CODE = ${healthResponse.code()}")
+                                println("HEALTH RESPONSE BODY = ${healthResponse.body()?.string()}")
+                            } catch (e: Exception) {
+                                println("HEALTH EXCEPTION = ${e.message}")
+                            }
+
+                            val response =
+                                RetrofitClient.api.createValuation(
+                                    "",
+                                    ValuationRequest(
+                                        county = county,
+                                        floorAreaM2 = floorArea.toDouble(),
+                                        bedrooms = bedrooms.toInt(),
+                                        propertyType = propertyType,
+                                        ber = ber
+                                    )
+                                )
+
+                            println("VALUATION RESPONSE CODE = ${response.code()}")
+
+                            if (response.isSuccessful) {
+
+                                response.body()?.let {
+
+                                    println("VALUATION SUCCESS")
+                                    println(it)
+
+                                    estimate = "€${it.estimate}"
+                                    lowEstimate = "€${it.low}"
+                                    highEstimate = "€${it.high}"
+                                    modelVersion = it.modelVersion
+                                    valuationId = it.valuationId
+                                }
+
+                            } else {
+
+                                errorMessage =
+                                    "API Error ${response.code()}"
+                            }
+
+                        } catch (e: Exception) {
+
+                            println("VALUATION EXCEPTION")
+                            println(e.toString())
+
+                            e.printStackTrace()
+
+                            errorMessage = e.toString()
+
+                            loading = false
+                        }
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -341,6 +450,15 @@ fun PropertyCheckerScreen() {
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Continue to Loan Application")
         }
     }
 }

@@ -11,7 +11,10 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(
+    onLoginSuccess: () -> Unit,
+    onRegisterClick: () -> Unit
+) {
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -90,6 +93,7 @@ fun LoginScreen() {
                             .addOnSuccessListener {
 
                                 successMessage = "Login successful"
+                                onLoginSuccess()
 
                             }
                             .addOnFailureListener {
@@ -109,17 +113,7 @@ fun LoginScreen() {
 
         OutlinedButton(
             onClick = {
-
-                /*
-                 * TODO
-                 *
-                 * Navigate to RegisterScreen()
-                 *
-                 * Requires Navigation setup.
-                 */
-
-                successMessage =
-                    "Register navigation placeholder."
+                onRegisterClick()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
