@@ -14,6 +14,9 @@ import ie.mtu.agenticlender.api.RetrofitClient
 import ie.mtu.agenticlender.api.ValuationDraft
 import ie.mtu.agenticlender.api.ValuationResponse
 import ie.mtu.agenticlender.api.ValuationRequest
+import ie.mtu.agenticlender.valuation.OVER_VALUATION_THRESHOLD_PERCENT
+import ie.mtu.agenticlender.valuation.comparePrice
+import ie.mtu.agenticlender.valuation.describeComparison
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -399,6 +402,38 @@ fun PropertyCheckerScreen(
                     Text(
                         text = "High Estimate: $highEstimate"
                     )
+
+                    // AL-6 US-122: compare the asking price with the estimate
+                    // (difference in € and %, and a warning if more than 10% above)
+                    val comparison = valuationResponse?.let { valuation ->
+                        askingPrice.toDoubleOrNull()?.let { price ->
+                            comparePrice(askingPrice = price, estimate = valuation.estimate)
+                        }
+                    }
+
+                    if (comparison != null) {
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = describeComparison(comparison),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        // The warning uses words as well as the red colour,
+                        // so it is clear even without seeing the colour
+                        if (comparison.isOverValued) {
+                            Text(
+                                text = "Warning: this property may be over-priced. " +
+                                        "The asking price is more than " +
+                                        "${OVER_VALUATION_THRESHOLD_PERCENT.toInt()}% above the estimate.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
                     Text(
                         text = "Model Version: $modelVersion"
