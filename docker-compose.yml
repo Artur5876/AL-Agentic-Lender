@@ -6,7 +6,7 @@
 #   Firestore emulator    localhost:8080
 #   Auth emulator         localhost:9099
 #   Backend API + docs    http://localhost:8000/docs
-#   Local EVM chain       http://localhost:8545  (used from Sprint 2, US-321)
+#   Local EVM chain       http://localhost:8545  (LoanNote, US-321/331)
 
 services:
   firebase:
@@ -27,10 +27,21 @@ services:
       AL_DEFAULT_BROKER_UID: broker-ciaran
       FIRESTORE_EMULATOR_HOST: firebase:8080
       FIREBASE_AUTH_EMULATOR_HOST: firebase:9099
+      # Loan note on the anvil chain (US-321/331). Deploy first: see contracts/README.md.
+      AL_CHAIN_MODE: web3
+      AL_CHAIN_RPC_URL: http://anvil:8545
+      AL_CHAIN_DEPLOYMENT_FILE: /app/deployments/local.json
+      # Secrets come from a git-ignored .env next to this file (copy .env.example).
+      AL_BORROWER_REF_SALT: ${AL_BORROWER_REF_SALT:-}
+      AL_CHAIN_SIGNER_KEY: ${AL_CHAIN_SIGNER_KEY:-}
+      AL_CHAIN_BANK_ADDRESS: ${AL_CHAIN_BANK_ADDRESS:-}
+    volumes:
+      - ./contracts/deployments:/app/deployments:ro
     ports:
       - "8000:8000"
     depends_on:
       - firebase
+      - anvil
 
   anvil:
     image: ghcr.io/foundry-rs/foundry:latest

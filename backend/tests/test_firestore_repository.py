@@ -56,3 +56,33 @@ def test_record_deliberation_writes_everything_in_one_transaction(repo):
                                  result["steps"], rec, now)
     assert repo.get_deliberation(app["id"])["finalDecision"] == result["decision"]
     assert len(repo.get_application(app["id"])["statusHistory"]) == 2
+
+
+def test_record_decision_writes_application_and_decision_doc(repo):
+    from app.lifecycle import Actor, Status
+    app = _new_app(repo)
+    now = datetime.now(UTC)
+    repo.change_status(app["id"], Status.AI_DELIBERATED, Actor.SYSTEM, "system", None, now)
+    decision = {"outcome": "underwriter_approved", "reason": None, "by": "uw", "at": now}
+    note = {"tokenId": 1, "txHash": "0x1", "auditHash": "ab" * 32, "auditTxHash": "0x2",
+            "chainStatus": "minted"}
+    doc = {"applicationId": app["id"], "brokerId": "broker-ciaran", **decision,
+           "auditHash": "ab" * 32, "auditTxHash": "0x2"}
+
+    repo.record_decision(app["id"], Status.UNDERWRITER_APPROVED, Actor.UNDERWRITER, "uw",
+                         None, now, decision, doc, note)
+
+    stored = repo.get_application(app["id"])
+    assert stored["status"] == "underwriter_approved"
+    assert stored["loanNote"] == note and stored["decision"]["outcome"] == "underwriter_approved"
+    (d,) = repo.list_decisions(app["id"])
+    assert d["auditHash"] == "ab" * 32 and d["brokerId"] == "broker-ciaran"
+
+    # Firestore keeps microseconds, so the audit hash can be recomputed from stored data.
+    from app.audit import canonical_json
+    assert canonical_json(stored["decision"]) == canonical_json(decision)
+
+    with pytest.raises(InvalidTransition):  # second approval refused, nothing added
+        repo.record_decision(app["id"], Status.UNDERWRITER_APPROVED, Actor.UNDERWRITER, "uw",
+                             None, now, decision, doc, note)
+    assert len(repo.list_decisions(app["id"])) == 1

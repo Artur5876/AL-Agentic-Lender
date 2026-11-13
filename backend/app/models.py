@@ -109,6 +109,11 @@ class ApplicationOut(ApiModel):
     ai_recommendation: dict | None = Field(
         default=None, description="Set by the AI committee (US-313): decision, deliberationId,"
                                   " completedAt. Null while status is 'applied'.")
+    decision: dict | None = Field(
+        default=None, description="Latest underwriter decision: outcome, reason, by, at.")
+    loan_note: dict | None = Field(
+        default=None, description="Set on approval: tokenId, txHash, auditHash, auditTxHash,"
+                                  " chainStatus ('minted').")
     created_at: datetime
     updated_at: datetime
 

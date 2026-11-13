@@ -73,8 +73,8 @@ The document ID is the human reference, e.g. `AL-2026-0117` (matches the mock-up
 | `metrics` | map | API (US-410) | `lti`, `ltv`, `dti`, `stressedDti`, `monthlyRepayment`, and `checks` (`ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`). `lti`/`dti`/`stressedDti` are null when income is 0. Seed documents carry illustrative numbers marked `source: "seed-illustrative"` and no `checks` |
 | `riskTier` | string or null | open decision | `low`, `medium`, `high`. Who sets it is not in the backlog — see section 5 |
 | `aiRecommendation` | map or null | API (US-313/414) | `decision`, `deliberationId` (= application ID), `completedAt`. Null while `applied`; set with the move to `ai_deliberated` (section 2.4) |
-| `decision` | map or null | API (US-251/252) | `outcome`, `reason`, `by`, `at` — S2 |
-| `loanNote` | map or null | API (US-251/331) | `tokenId`, `txHash`, `auditHash`, `auditTxHash`, `chainStatus` — S2 |
+| `decision` | map or null | API (US-251/252) | Latest underwriter decision: `outcome` (the status code), `reason` (null for approval), `by` (UID), `at`. Full history in `decisions` (section 2.5) |
+| `loanNote` | map or null | API (US-251/321/331) | Set only on `underwriter_approved`: `tokenId` (int), `txHash` (mint tx, `0x…`), `auditHash` (64 hex, SHA-256 of the audit record), `auditTxHash` (`0x…`), `chainStatus` (`minted`) |
 | `payment` | map or null | API (US-151) | `status`, `paymentId` — S3 |
 | `createdAt`, `updatedAt` | timestamp | API | Server time |
 
@@ -142,9 +142,39 @@ the API stores them as given.
 `steps` must contain each of the four agents exactly once, with all five fields of the right type
 and a UTC timestamp. The committee does not use Firebase; the backend saves the result.
 
-### 2.5 Later sprints (shape only, owners fill in details)
+### 2.5 `decisions/{decisionId}` — S2 (US-251/252 backend, US-331)
 
-- `decisions/{decisionId}`: `applicationId`, `brokerId` (copied, for the rules), `outcome`, `reason`, `by`, `at`, `auditHash`, `auditTxHash` (US-251–253, US-331).
+One document per underwriter decision (`underwriter_approved`, `conditionally_approved`,
+`declined`), auto ID. Written by the API in the **same transaction** as the status change and
+`applications/{id}.decision` / `.loanNote`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `applicationId` | string | |
+| `brokerId` | string or null | Copied from the application so the security rules need no extra read |
+| `outcome` | string | The new status code |
+| `reason` | string or null | Required for `conditionally_approved` and `declined` |
+| `by` | string | Underwriter UID |
+| `at` | timestamp | Server time |
+| `auditHash` | string or null | Approval only: same as `loanNote.auditHash` |
+| `auditTxHash` | string or null | Approval only: transaction that stored the hash on-chain |
+
+**Approval mints a loan note (US-321, US-331).** Before the status changes, the API:
+1. builds the **audit record** `{applicationId, decision: {outcome, reason, by, at}, creditMemo,
+   valuation, metrics}` (`creditMemo` from `deliberations/{id}`, null if none),
+2. hashes it: `auditHash = SHA-256(canonical_json(record))` (`backend/app/audit.py`: sorted keys,
+   compact, UTF-8, datetimes ISO 8601 UTC),
+3. mints `LoanNote` to the bank's address with `principalCents = loanAmount × 100`,
+   `aprBps = 390` (config), `termYears`, `borrowerRef = SHA-256(borrowerId + secret salt)`,
+4. calls `recordAudit(tokenId, auditHash)`,
+5. then writes the status, `decision`, `loanNote` and `decisions/{id}` in one transaction.
+
+If step 3 or 4 fails, the API returns `502 mint_failed` and the status stays unchanged.
+To verify a decision later, rebuild the record from Firestore, hash it and compare with
+`getAuditHash(tokenId)` on-chain. Conditional approval and decline do not mint.
+
+### 2.6 Later sprints (shape only, owners fill in details)
+
 - `applications/{id}/messages/{messageId}`: `senderId`, `senderRole`, `text` (1–2000 chars), `sentAt` (server time).
 - `supportRequests/{id}`: `borrowerId`, `applicationId` (optional), `category`, `description`, `status: "open"`, `createdAt`.
   The reference shown to the user (US-161) is the document ID.

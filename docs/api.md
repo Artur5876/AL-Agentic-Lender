@@ -114,7 +114,7 @@ underwriters get `role` set by the seed script.
 | `POST /valuations` | signed in | Property spec → `estimate`, `low`, `high` (80% range), `modelVersion` + `valuationId`. **`isStub: true` = the model file is missing and the numbers are fake**; clients decide on this flag, not on the amount | US-121, US-403 |
 | `POST /applications` | borrower | Submit an application → status `applied`; the AI committee then runs in the background and moves it to `ai_deliberated` | US-112, US-313 |
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
-| `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }` | US-302 |
+| `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }`. **`underwriter_approved` also mints the loan note** (see below) | US-302, US-251, US-331 |
 
 Live lists (pipeline, "my applications", status timeline) are **not** API calls: read Firestore
 directly with a listener. Required queries are in `docs/data-model.md` section 4.
@@ -146,6 +146,27 @@ Listen to the application document to see the change; do not poll. **Sprint 2: t
 a stub (`deliberations/{id}.isStub == true`, memo starts with `[STUB`)** — label it as placeholder
 advice. If the committee fails, the status simply stays `applied`.
 
+### Approve → loan note (US-251 button, US-321/331)
+
+`POST /applications/{id}/status` with `{"to": "underwriter_approved"}` (underwriter, from
+`ai_deliberated` or `conditionally_approved`) mints the loan note on the local chain **before**
+changing the status. The response (and the Firestore document) then contains:
+
+```json
+"status": "underwriter_approved",
+"decision": { "outcome": "underwriter_approved", "reason": null, "by": "uw-rachel", "at": "…" },
+"loanNote": { "tokenId": 1, "txHash": "0x…", "auditHash": "3f2a…(64 hex)",
+              "auditTxHash": "0x…", "chainStatus": "minted" }
+```
+
+Minting takes a few seconds: show a spinner on the button. If it fails the API returns
+`502 mint_failed`, the status stays as it was, and the underwriter can try again.
+`conditionally_approved` and `declined` (reason required) set `decision` but never mint.
+
+**Running it locally:** the chain must be up and the contract deployed (`contracts/README.md`), and
+`AL_BORROWER_REF_SALT` must be set (copy `.env.example`). Without a chain, set
+`AL_CHAIN_MODE=fake` on the backend: approvals then get made-up hashes.
+
 ## 4. Errors — always the same shape
 
 ```json
@@ -161,5 +182,6 @@ advice. If the committee fails, the status simply stays `applied`.
 | 409 | `invalid_transition` | Status change not allowed from the current status |
 | 422 | `validation_error` / `reason_required` | Bad input; `details` lists the fields |
 | 400 | `bad_valuation` | `valuationId` unknown or not yours |
+| 502 | `mint_failed` | Approval: the loan note could not be minted / audit hash not recorded. Status unchanged; retry |
 
 Show `message` to the user; use `details[].field` to highlight form fields.

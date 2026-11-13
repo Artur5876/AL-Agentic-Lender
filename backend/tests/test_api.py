@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import integrations
+from app.chain import FakeChain
 from app.config import Settings
 from app.lifecycle import Actor, Status
 from app.main import create_app
@@ -39,8 +40,8 @@ def repo():
 @pytest.fixture
 def client(repo):
     settings = Settings(repository="memory", auth_mode="dev",
-                        default_broker_uid="broker-ciaran")
-    return TestClient(create_app(settings, repo))
+                        default_broker_uid="broker-ciaran", borrower_ref_salt="test-salt")
+    return TestClient(create_app(settings, repo, chain=FakeChain()))
 
 
 def submit(client, headers=BORROWER, body=APPLICATION):
