@@ -116,6 +116,30 @@ underwriters get `role` set by the seed script.
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
 | `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }`. **`underwriter_approved` also mints the loan note** (see below) | US-302, US-251, US-331 |
 
+### Who may call what (US-312)
+
+The API verifies the Firebase ID token on **every** request except `/health` (signature, expiry
+and project, via the Firebase Admin SDK), then reads the role from the `role` claim
+(no claim = borrower). A token can never carry the `system` role.
+
+| Endpoint | No / bad token | Borrower | Broker | Underwriter |
+|---|---|---|---|---|
+| `GET /health` | 200 (public) | 200 | 200 | 200 |
+| `POST /valuations` | 401 | 201 | 201 | 201 |
+| `POST /applications` | 401 | **201** | 403 `forbidden` | 403 `forbidden` |
+| `GET /applications/{id}` | 401 | 200 own · 404 others | 200 assigned · 404 others | 200 any |
+| `POST /applications/{id}/status` → `underwriter_approved`, `conditionally_approved`, `declined` | 401 | 403 `actor_not_allowed` (own) · 404 others | 403 `actor_not_allowed` (assigned) · 404 others | **200** (if the state machine allows the move) |
+| `POST /applications/{id}/status` → `funded`, `closed` | 401 | 403 `actor_not_allowed` | 403 `actor_not_allowed` | **200** (if allowed) |
+| `applied` → `ai_deliberated` | — | — | — | — (system only, automatic, US-313) |
+
+- **404 instead of 403** for files you may not see is deliberate, so application IDs cannot be
+  probed. It is the same rule as the Firestore security rules (`canReadApp`).
+- Status changes are checked by the state machine (`backend/app/lifecycle.py`): 409 if the move is
+  not possible from the current status, 403 if your role may not make it, 422 if a reason is missing.
+- Every 401 response carries the header `WWW-Authenticate: Bearer`.
+- Tested in `backend/tests/test_auth.py`: every protected endpoint × (no token, 11 kinds of
+  malformed token), wrong-role and right-role cases, and real ID tokens from the Auth emulator.
+
 Live lists (pipeline, "my applications", status timeline) are **not** API calls: read Firestore
 directly with a listener. Required queries are in `docs/data-model.md` section 4.
 
@@ -176,7 +200,7 @@ Minting takes a few seconds: show a spinner on the button. If it fails the API r
 
 | HTTP | `code` | Meaning |
 |---|---|---|
-| 401 | `unauthenticated` | Missing, invalid or expired token |
+| 401 | `unauthenticated` | Missing, invalid or expired token (header `WWW-Authenticate: Bearer`) |
 | 403 | `forbidden` / `actor_not_allowed` | Your role may not do this |
 | 404 | `not_found` | Does not exist, or you may not see it |
 | 409 | `invalid_transition` | Status change not allowed from the current status |

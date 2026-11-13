@@ -57,9 +57,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _error(status_code: int, code: str, message: str, details=None) -> JSONResponse:
+def _error(status_code: int, code: str, message: str, details=None,
+           headers: dict[str, str] | None = None) -> JSONResponse:
     body = {"error": {"code": code, "message": message, "details": details}}
-    return JSONResponse(status_code=status_code, content=body)
+    return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
 def _to_out(doc: dict) -> ApplicationOut:
@@ -105,8 +106,9 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None,
     async def _http(_: Request, exc: HTTPException):
         if isinstance(exc.detail, dict):
             return _error(exc.status_code, exc.detail.get("code", "error"),
-                          exc.detail.get("message", ""), exc.detail.get("details"))
-        return _error(exc.status_code, "error", str(exc.detail))
+                          exc.detail.get("message", ""), exc.detail.get("details"),
+                          headers=exc.headers)  # keeps WWW-Authenticate on 401 (US-312)
+        return _error(exc.status_code, "error", str(exc.detail), headers=exc.headers)
 
     @app.exception_handler(TransitionError)
     async def _transition(_: Request, exc: TransitionError):
