@@ -8,14 +8,17 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import integrations
 from .auth import CurrentUser, can_read_application, get_current_user, require_role
+from .chain import ChainClient, make_chain
 from .config import Settings, get_settings
+from .decisions import UNDERWRITER_DECISIONS, MintFailed, apply_decision
+from .deliberation import Committee, default_committee, deliberate
 from .lifecycle import (
     LABELS,
     Actor,
@@ -40,6 +43,7 @@ log = logging.getLogger("al")
 ERRORS = {
     400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse},
     404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse},
+    502: {"model": ErrorResponse},
 }
 
 _TRANSITION_STATUS = {
@@ -53,9 +57,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _error(status_code: int, code: str, message: str, details=None) -> JSONResponse:
+def _error(status_code: int, code: str, message: str, details=None,
+           headers: dict[str, str] | None = None) -> JSONResponse:
     body = {"error": {"code": code, "message": message, "details": details}}
-    return JSONResponse(status_code=status_code, content=body)
+    return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
 def _to_out(doc: dict) -> ApplicationOut:
@@ -63,8 +68,14 @@ def _to_out(doc: dict) -> ApplicationOut:
     return ApplicationOut.model_validate({**doc, "statusLabel": LABELS[s]})
 
 
-def create_app(settings: Settings | None = None, repo: Repository | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, repo: Repository | None = None,
+               committee: Committee = default_committee,
+               chain: ChainClient | None = None) -> FastAPI:
+    """`committee` and `chain` can be replaced in tests. Production uses
+    integrations.run_committee and the chain from AL_CHAIN_MODE."""
     settings = settings or get_settings()
+    if chain is None:
+        chain = make_chain(settings)
     if repo is None:
         repo = (FirestoreRepository(settings.firebase_project_id)
                 if settings.repository == "firestore" else InMemoryRepository())
@@ -95,12 +106,17 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
     async def _http(_: Request, exc: HTTPException):
         if isinstance(exc.detail, dict):
             return _error(exc.status_code, exc.detail.get("code", "error"),
-                          exc.detail.get("message", ""), exc.detail.get("details"))
-        return _error(exc.status_code, "error", str(exc.detail))
+                          exc.detail.get("message", ""), exc.detail.get("details"),
+                          headers=exc.headers)  # keeps WWW-Authenticate on 401 (US-312)
+        return _error(exc.status_code, "error", str(exc.detail), headers=exc.headers)
 
     @app.exception_handler(TransitionError)
     async def _transition(_: Request, exc: TransitionError):
         return _error(_TRANSITION_STATUS.get(type(exc), 409), exc.code, str(exc))
+
+    @app.exception_handler(MintFailed)
+    async def _mint_failed(_: Request, exc: MintFailed):
+        return _error(502, exc.code, str(exc))
 
     @app.exception_handler(NotFound)
     async def _not_found(_: Request, exc: NotFound):
@@ -130,6 +146,7 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
               summary="Borrower submits a loan application (US-112)")
     def create_application(
         body: ApplicationCreate,
+        background: BackgroundTasks,
         user: CurrentUser = Depends(require_role(Actor.BORROWER)),
     ):
         data = body.model_dump(by_alias=True, exclude={"valuation_id"})
@@ -148,6 +165,8 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
         }
         data["metrics"] = integrations.compute_metrics(data)
         doc = repo.create_application(data, user.uid, _now())
+        # US-313: AI committee runs after the response is sent; status is still "applied" here.
+        background.add_task(deliberate, doc["id"], repo, committee)
         return _to_out(doc)
 
     @app.get("/applications/{app_id}", response_model=ApplicationOut,
@@ -162,13 +181,19 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
 
     @app.post("/applications/{app_id}/status", response_model=ApplicationOut,
               tags=["applications"], responses=ERRORS,
-              summary="Change status through the state machine (US-302)")
+              summary="Change status through the state machine (US-302). "
+                      "Approval mints the loan note (US-321, US-331)")
     def change_status(app_id: str, body: StatusChange,
                       user: CurrentUser = Depends(get_current_user)):
         doc = repo.get_application(app_id)
         if doc is None or not can_read_application(user, doc):
             raise NotFound(app_id)
-        updated = repo.change_status(app_id, body.to, user.role, user.uid, body.reason, _now())
+        if body.to in UNDERWRITER_DECISIONS:
+            updated = apply_decision(doc, body.to, user, body.reason, _now(), repo, chain,
+                                     settings)
+        else:
+            updated = repo.change_status(app_id, body.to, user.role, user.uid, body.reason,
+                                         _now())
         return _to_out(updated)
 
     return app

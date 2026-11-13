@@ -106,6 +106,14 @@ class ApplicationOut(ApiModel):
     valuation: dict | None = None
     metrics: dict | None = None
     risk_tier: str | None = None
+    ai_recommendation: dict | None = Field(
+        default=None, description="Set by the AI committee (US-313): decision, deliberationId,"
+                                  " completedAt. Null while status is 'applied'.")
+    decision: dict | None = Field(
+        default=None, description="Latest underwriter decision: outcome, reason, by, at.")
+    loan_note: dict | None = Field(
+        default=None, description="Set on approval: tokenId, txHash, auditHash, auditTxHash,"
+                                  " chainStatus ('minted').")
     created_at: datetime
     updated_at: datetime
 

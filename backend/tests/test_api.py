@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import integrations
+from app.chain import FakeChain
 from app.config import Settings
 from app.lifecycle import Actor, Status
 from app.main import create_app
@@ -39,8 +40,8 @@ def repo():
 @pytest.fixture
 def client(repo):
     settings = Settings(repository="memory", auth_mode="dev",
-                        default_broker_uid="broker-ciaran")
-    return TestClient(create_app(settings, repo))
+                        default_broker_uid="broker-ciaran", borrower_ref_salt="test-salt")
+    return TestClient(create_app(settings, repo, chain=FakeChain()))
 
 
 def submit(client, headers=BORROWER, body=APPLICATION):
@@ -196,12 +197,9 @@ def test_read_access(client, headers, visible):
 
 # ---------- status changes through the state machine ----------
 
-def test_full_happy_path(client, repo):
-    from datetime import UTC, datetime
+def test_full_happy_path(client):
     app_id = submit(client).json()["id"]
-    # applied -> ai_deliberated is a SYSTEM move (US-313, Sprint 2); simulate it directly.
-    repo.change_status(app_id, Status.AI_DELIBERATED, Actor.SYSTEM, "system", None,
-                       datetime.now(UTC))
+    # applied -> ai_deliberated now happens automatically (US-313 background committee).
     r = client.post(f"/applications/{app_id}/status",
                     json={"to": "underwriter_approved"}, headers=UNDERWRITER)
     assert r.status_code == 200 and r.json()["status"] == "underwriter_approved"
@@ -217,22 +215,16 @@ def test_skipping_a_stage_is_409(client):
     assert r.json()["error"]["code"] == "invalid_transition"
 
 
-def test_broker_cannot_decide(client, repo):
-    from datetime import UTC, datetime
-    app_id = submit(client).json()["id"]
-    repo.change_status(app_id, Status.AI_DELIBERATED, Actor.SYSTEM, "system", None,
-                       datetime.now(UTC))
+def test_broker_cannot_decide(client):
+    app_id = submit(client).json()["id"]  # committee has moved it to ai_deliberated
     r = client.post(f"/applications/{app_id}/status", json={"to": "declined", "reason": "x"},
                     headers=BROKER)
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "actor_not_allowed"
 
 
-def test_decline_without_reason_is_422(client, repo):
-    from datetime import UTC, datetime
-    app_id = submit(client).json()["id"]
-    repo.change_status(app_id, Status.AI_DELIBERATED, Actor.SYSTEM, "system", None,
-                       datetime.now(UTC))
+def test_decline_without_reason_is_422(client):
+    app_id = submit(client).json()["id"]  # committee has moved it to ai_deliberated
     r = client.post(f"/applications/{app_id}/status", json={"to": "declined"},
                     headers=UNDERWRITER)
     assert r.status_code == 422

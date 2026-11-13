@@ -112,9 +112,33 @@ underwriters get `role` set by the seed script.
 |---|---|---|---|
 | `GET /health` | anyone | Is the API up | — |
 | `POST /valuations` | signed in | Property spec → `estimate`, `low`, `high` (80% range), `modelVersion` + `valuationId`. **`isStub: true` = the model file is missing and the numbers are fake**; clients decide on this flag, not on the amount | US-121, US-403 |
-| `POST /applications` | borrower | Submit an application → status `applied` | US-112 |
+| `POST /applications` | borrower | Submit an application → status `applied`; the AI committee then runs in the background and moves it to `ai_deliberated` | US-112, US-313 |
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
-| `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }` | US-302 |
+| `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }`. **`underwriter_approved` also mints the loan note** (see below) | US-302, US-251, US-331 |
+
+### Who may call what (US-312)
+
+The API verifies the Firebase ID token on **every** request except `/health` (signature, expiry
+and project, via the Firebase Admin SDK), then reads the role from the `role` claim
+(no claim = borrower). A token can never carry the `system` role.
+
+| Endpoint | No / bad token | Borrower | Broker | Underwriter |
+|---|---|---|---|---|
+| `GET /health` | 200 (public) | 200 | 200 | 200 |
+| `POST /valuations` | 401 | 201 | 201 | 201 |
+| `POST /applications` | 401 | **201** | 403 `forbidden` | 403 `forbidden` |
+| `GET /applications/{id}` | 401 | 200 own · 404 others | 200 assigned · 404 others | 200 any |
+| `POST /applications/{id}/status` → `underwriter_approved`, `conditionally_approved`, `declined` | 401 | 403 `actor_not_allowed` (own) · 404 others | 403 `actor_not_allowed` (assigned) · 404 others | **200** (if the state machine allows the move) |
+| `POST /applications/{id}/status` → `funded`, `closed` | 401 | 403 `actor_not_allowed` | 403 `actor_not_allowed` | **200** (if allowed) |
+| `applied` → `ai_deliberated` | — | — | — | — (system only, automatic, US-313) |
+
+- **404 instead of 403** for files you may not see is deliberate, so application IDs cannot be
+  probed. It is the same rule as the Firestore security rules (`canReadApp`).
+- Status changes are checked by the state machine (`backend/app/lifecycle.py`): 409 if the move is
+  not possible from the current status, 403 if your role may not make it, 422 if a reason is missing.
+- Every 401 response carries the header `WWW-Authenticate: Bearer`.
+- Tested in `backend/tests/test_auth.py`: every protected endpoint × (no token, 11 kinds of
+  malformed token), wrong-role and right-role cases, and real ID tokens from the Auth emulator.
 
 Live lists (pipeline, "my applications", status timeline) are **not** API calls: read Firestore
 directly with a listener. Required queries are in `docs/data-model.md` section 4.
@@ -138,6 +162,35 @@ Response `201`: the stored application (`id` like `AL-2026-0122`, `status: "appl
 `stressedDti`, `monthlyRepayment` and `checks` with `ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`.
 `lti` and the DTI values are `null` when income is 0).
 
+**After the response (US-313):** the API runs the AI committee in the background. When it
+finishes, the application moves to `ai_deliberated` (status history entry with `role: "system"`)
+and `aiRecommendation` is set to `{decision, deliberationId, completedAt}`. The full committee
+log is in `deliberations/{id}` and its `steps` (staff only, see `docs/data-model.md` 2.4).
+Listen to the application document to see the change; do not poll. **Sprint 2: the committee is
+a stub (`deliberations/{id}.isStub == true`, memo starts with `[STUB`)** — label it as placeholder
+advice. If the committee fails, the status simply stays `applied`.
+
+### Approve → loan note (US-251 button, US-321/331)
+
+`POST /applications/{id}/status` with `{"to": "underwriter_approved"}` (underwriter, from
+`ai_deliberated` or `conditionally_approved`) mints the loan note on the local chain **before**
+changing the status. The response (and the Firestore document) then contains:
+
+```json
+"status": "underwriter_approved",
+"decision": { "outcome": "underwriter_approved", "reason": null, "by": "uw-rachel", "at": "…" },
+"loanNote": { "tokenId": 1, "txHash": "0x…", "auditHash": "3f2a…(64 hex)",
+              "auditTxHash": "0x…", "chainStatus": "minted" }
+```
+
+Minting takes a few seconds: show a spinner on the button. If it fails the API returns
+`502 mint_failed`, the status stays as it was, and the underwriter can try again.
+`conditionally_approved` and `declined` (reason required) set `decision` but never mint.
+
+**Running it locally:** the chain must be up and the contract deployed (`contracts/README.md`), and
+`AL_BORROWER_REF_SALT` must be set (copy `.env.example`). Without a chain, set
+`AL_CHAIN_MODE=fake` on the backend: approvals then get made-up hashes.
+
 ## 4. Errors — always the same shape
 
 ```json
@@ -147,11 +200,12 @@ Response `201`: the stored application (`id` like `AL-2026-0122`, `status: "appl
 
 | HTTP | `code` | Meaning |
 |---|---|---|
-| 401 | `unauthenticated` | Missing, invalid or expired token |
+| 401 | `unauthenticated` | Missing, invalid or expired token (header `WWW-Authenticate: Bearer`) |
 | 403 | `forbidden` / `actor_not_allowed` | Your role may not do this |
 | 404 | `not_found` | Does not exist, or you may not see it |
 | 409 | `invalid_transition` | Status change not allowed from the current status |
 | 422 | `validation_error` / `reason_required` | Bad input; `details` lists the fields |
 | 400 | `bad_valuation` | `valuationId` unknown or not yours |
+| 502 | `mint_failed` | Approval: the loan note could not be minted / audit hash not recorded. Status unchanged; retry |
 
 Show `message` to the user; use `details[].field` to highlight form fields.
