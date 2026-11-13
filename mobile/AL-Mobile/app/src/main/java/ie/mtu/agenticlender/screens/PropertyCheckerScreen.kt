@@ -26,7 +26,9 @@ import kotlinx.coroutines.tasks.await
 fun PropertyCheckerScreen(
     onContinue: (ValuationDraft) -> Unit,
     // AL-8 / AL-7: opens the "My application" screen. Empty by default so old calls still work.
-    onViewApplication: () -> Unit = {}
+    onViewApplication: () -> Unit = {},
+    // AL-3 US-111: opens the borrowing estimate screen. Empty by default so old calls still work.
+    onEstimate: () -> Unit = {}
 ) {
 
     var county by remember { mutableStateOf("") }
@@ -122,6 +124,11 @@ fun PropertyCheckerScreen(
         // AL-8 / AL-7: a borrower who has already applied can check their application here
         TextButton(onClick = onViewApplication) {
             Text("View my application")
+        }
+
+        // AL-3 US-111: check how much you could borrow before applying
+        TextButton(onClick = onEstimate) {
+            Text("How much could I borrow?")
         }
 
         Spacer(modifier = Modifier.height(16.dp))

@@ -18,6 +18,13 @@ interface ApiService {
         @Body request: ValuationRequest
     ): Response<ValuationResponse>
 
+    // AL-3 US-111: borrowing estimate from the calculation module (nothing is saved)
+    @POST("affordability")
+    suspend fun getAffordability(
+        @Header("Authorization") auth: String,
+        @Body request: AffordabilityRequest
+    ): Response<AffordabilityResponse>
+
     @POST("applications")
     suspend fun submitApplication(
         @Header("Authorization") auth: String,
