@@ -17,7 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @Composable
-fun LoanApplicationScreen(valuationDraft: ValuationDraft?) {
+fun LoanApplicationScreen(
+    valuationDraft: ValuationDraft?,
+    // AL-8 / AL-7: opens the "My application" screen. Empty by default so old calls still work.
+    onViewApplication: () -> Unit = {}
+) {
     var buyerType by remember { mutableStateOf("") }
     var grossAnnualIncome by remember { mutableStateOf("") }
     var monthlyDebts by remember { mutableStateOf("") }
@@ -40,7 +44,12 @@ fun LoanApplicationScreen(valuationDraft: ValuationDraft?) {
             .padding(16.dp)
     ) {
         Text("Loan Application", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+
+        // AL-8 / AL-7: always reachable from here, not only after submitting
+        TextButton(onClick = onViewApplication) {
+            Text("View my application")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text("Buyer Type", style = MaterialTheme.typography.titleMedium)
         Row {
@@ -229,6 +238,11 @@ fun LoanApplicationScreen(valuationDraft: ValuationDraft?) {
                     Text("Application Reference: $applicationReference")
                     Text("Status: $applicationStatus")
                     Text("Status Label: $applicationStatusLabel")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // AL-8 / AL-7: follow the application as it moves through the stages
+                    Button(onClick = onViewApplication) {
+                        Text("Track my application")
+                    }
                 }
             }
         }

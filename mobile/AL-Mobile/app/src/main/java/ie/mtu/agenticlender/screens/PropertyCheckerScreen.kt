@@ -24,7 +24,9 @@ import kotlinx.coroutines.tasks.await
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PropertyCheckerScreen(
-    onContinue: (ValuationDraft) -> Unit
+    onContinue: (ValuationDraft) -> Unit,
+    // AL-8 / AL-7: opens the "My application" screen. Empty by default so old calls still work.
+    onViewApplication: () -> Unit = {}
 ) {
 
     var county by remember { mutableStateOf("") }
@@ -116,6 +118,11 @@ fun PropertyCheckerScreen(
             text = "Property Checker",
             style = MaterialTheme.typography.headlineMedium
         )
+
+        // AL-8 / AL-7: a borrower who has already applied can check their application here
+        TextButton(onClick = onViewApplication) {
+            Text("View my application")
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
