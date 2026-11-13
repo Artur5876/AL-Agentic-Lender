@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ie.mtu.agenticlender.screens.LoanApplicationScreen
 import ie.mtu.agenticlender.screens.LoginScreen
+import ie.mtu.agenticlender.screens.MyApplicationScreen
 import ie.mtu.agenticlender.screens.PropertyCheckerScreen
 import ie.mtu.agenticlender.screens.RegisterScreen
 import ie.mtu.agenticlender.api.ValuationDraft
@@ -59,13 +60,32 @@ fun AppNavigation() {
                 onContinue = { draft ->
                     valuationDraft = draft
                     navController.navigate("loanApplication")
+                },
+                // AL-8 / AL-7: a returning borrower can go straight to their application
+                onViewApplication = {
+                    navController.navigate("myApplication")
                 }
             )
         }
 
         composable("loanApplication") {
 
-            LoanApplicationScreen(valuationDraft = valuationDraft)
+            LoanApplicationScreen(
+                valuationDraft = valuationDraft,
+                // AL-8 / AL-7: after submitting, follow the application's progress
+                onViewApplication = {
+                    navController.navigate("myApplication")
+                }
+            )
+        }
+
+        // AL-8 US-132 lifecycle timeline + AL-7 US-131 LTV and DTI
+        composable("myApplication") {
+
+            MyApplicationScreen(
+                // popBackStack() goes back one screen, like the phone's Back button
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }
