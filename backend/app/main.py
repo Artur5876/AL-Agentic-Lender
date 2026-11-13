@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from . import integrations
 from .auth import CurrentUser, can_read_application, get_current_user, require_role
 from .config import Settings, get_settings
+from .deliberation import Committee, default_committee, deliberate
 from .lifecycle import (
     LABELS,
     Actor,
@@ -63,7 +64,9 @@ def _to_out(doc: dict) -> ApplicationOut:
     return ApplicationOut.model_validate({**doc, "statusLabel": LABELS[s]})
 
 
-def create_app(settings: Settings | None = None, repo: Repository | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, repo: Repository | None = None,
+               committee: Committee = default_committee) -> FastAPI:
+    """`committee` can be replaced in tests; production uses integrations.run_committee."""
     settings = settings or get_settings()
     if repo is None:
         repo = (FirestoreRepository(settings.firebase_project_id)
@@ -130,6 +133,7 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
               summary="Borrower submits a loan application (US-112)")
     def create_application(
         body: ApplicationCreate,
+        background: BackgroundTasks,
         user: CurrentUser = Depends(require_role(Actor.BORROWER)),
     ):
         data = body.model_dump(by_alias=True, exclude={"valuation_id"})
@@ -148,6 +152,8 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None)
         }
         data["metrics"] = integrations.compute_metrics(data)
         doc = repo.create_application(data, user.uid, _now())
+        # US-313: AI committee runs after the response is sent; status is still "applied" here.
+        background.add_task(deliberate, doc["id"], repo, committee)
         return _to_out(doc)
 
     @app.get("/applications/{app_id}", response_model=ApplicationOut,

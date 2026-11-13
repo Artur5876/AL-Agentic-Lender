@@ -24,6 +24,11 @@ class NotFound(Exception):
     pass
 
 
+def step_id(index: int, step: dict) -> str:
+    """Document ID for deliberations/{appId}/steps/{stepId}: keeps the agents in order."""
+    return f"{index + 1:02d}-{step['agent']}"
+
+
 def make_reference(year: int, number: int) -> str:
     return f"AL-{year}-{number:04d}"
 
@@ -58,6 +63,11 @@ class Repository(Protocol):
     ) -> dict: ...
     def save_valuation(self, data: dict, now: datetime) -> dict: ...
     def get_valuation(self, valuation_id: str) -> dict | None: ...
+    def record_deliberation(
+        self, app_id: str, deliberation: dict, steps: list[dict],
+        recommendation: dict, now: datetime,
+    ) -> dict: ...
+    def get_deliberation(self, app_id: str) -> dict | None: ...
 
 
 class InMemoryRepository:
@@ -65,6 +75,7 @@ class InMemoryRepository:
         self._lock = threading.Lock()
         self._apps: dict[str, dict] = {}
         self._valuations: dict[str, dict] = {}
+        self._deliberations: dict[str, dict] = {}
         self._counters: dict[int, int] = {}
 
     def create_application(self, data: dict, actor_uid: str, now: datetime) -> dict:
@@ -104,6 +115,33 @@ class InMemoryRepository:
         with self._lock:
             doc = self._valuations.get(valuation_id)
             return {"id": valuation_id, **doc} if doc else None
+
+    def record_deliberation(self, app_id, deliberation, steps, recommendation, now) -> dict:
+        """Save the committee result AND move applied -> ai_deliberated as one step.
+        If the state machine refuses, nothing is written."""
+        with self._lock:
+            doc = self._apps.get(app_id)
+            if doc is None:
+                raise NotFound(app_id)
+            check_transition(Status(doc["status"]), Status.AI_DELIBERATED, Actor.SYSTEM)
+            entry = history_entry(Status.AI_DELIBERATED, now, "system", Actor.SYSTEM).to_dict()
+            self._deliberations[app_id] = {
+                "doc": dict(deliberation),
+                "steps": {step_id(i, st): dict(st) for i, st in enumerate(steps)},
+            }
+            doc["status"] = Status.AI_DELIBERATED.value
+            doc["statusHistory"] = [*doc["statusHistory"], entry]
+            doc["aiRecommendation"] = dict(recommendation)
+            doc["updatedAt"] = now
+            return {"id": app_id, **doc}
+
+    def get_deliberation(self, app_id: str) -> dict | None:
+        with self._lock:
+            d = self._deliberations.get(app_id)
+            if d is None:
+                return None
+            steps = [{"id": k, **v} for k, v in sorted(d["steps"].items())]
+            return {"id": app_id, **d["doc"], "steps": steps}
 
 
 def firestore_client(project_id: str):
@@ -174,3 +212,38 @@ class FirestoreRepository:
     def get_valuation(self, valuation_id: str) -> dict | None:
         snap = self._db.collection("valuations").document(valuation_id).get()
         return {"id": snap.id, **snap.to_dict()} if snap.exists else None
+
+    def record_deliberation(self, app_id, deliberation, steps, recommendation, now) -> dict:
+        """One transaction: check the state machine, write deliberations/{id} and its
+        steps, then update the application. Either all of it is stored or none of it."""
+        db, fs = self._db, self._fs
+        app_ref = db.collection("applications").document(app_id)
+        delib_ref = db.collection("deliberations").document(app_id)
+
+        @fs.transactional
+        def _record(tx) -> dict:
+            snap = app_ref.get(transaction=tx)  # all reads before any write
+            if not snap.exists:
+                raise NotFound(app_id)
+            doc = snap.to_dict()
+            check_transition(Status(doc["status"]), Status.AI_DELIBERATED, Actor.SYSTEM)
+            entry = history_entry(Status.AI_DELIBERATED, now, "system", Actor.SYSTEM).to_dict()
+            history = [*doc.get("statusHistory", []), entry]
+            tx.set(delib_ref, deliberation)
+            for i, st in enumerate(steps):
+                tx.set(delib_ref.collection("steps").document(step_id(i, st)), st)
+            changes = {"status": Status.AI_DELIBERATED.value, "statusHistory": history,
+                       "aiRecommendation": recommendation, "updatedAt": now}
+            tx.update(app_ref, changes)
+            return {"id": app_id, **doc, **changes}
+
+        return _record(db.transaction())
+
+    def get_deliberation(self, app_id: str) -> dict | None:
+        ref = self._db.collection("deliberations").document(app_id)
+        snap = ref.get()
+        if not snap.exists:
+            return None
+        steps = [{"id": s.id, **s.to_dict()} for s in ref.collection("steps").stream()]
+        steps.sort(key=lambda s: s["id"])
+        return {"id": app_id, **snap.to_dict(), "steps": steps}

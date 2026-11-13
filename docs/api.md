@@ -112,7 +112,7 @@ underwriters get `role` set by the seed script.
 |---|---|---|---|
 | `GET /health` | anyone | Is the API up | — |
 | `POST /valuations` | signed in | Property spec → `estimate`, `low`, `high` (80% range), `modelVersion` + `valuationId`. **`isStub: true` = the model file is missing and the numbers are fake**; clients decide on this flag, not on the amount | US-121, US-403 |
-| `POST /applications` | borrower | Submit an application → status `applied` | US-112 |
+| `POST /applications` | borrower | Submit an application → status `applied`; the AI committee then runs in the background and moves it to `ai_deliberated` | US-112, US-313 |
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
 | `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }` | US-302 |
 
@@ -137,6 +137,14 @@ Response `201`: the stored application (`id` like `AL-2026-0122`, `status: "appl
 `statusLabel: "Applied"`, `metrics` filled by the calculation module: `lti`, `ltv`, `dti`,
 `stressedDti`, `monthlyRepayment` and `checks` with `ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`.
 `lti` and the DTI values are `null` when income is 0).
+
+**After the response (US-313):** the API runs the AI committee in the background. When it
+finishes, the application moves to `ai_deliberated` (status history entry with `role: "system"`)
+and `aiRecommendation` is set to `{decision, deliberationId, completedAt}`. The full committee
+log is in `deliberations/{id}` and its `steps` (staff only, see `docs/data-model.md` 2.4).
+Listen to the application document to see the change; do not poll. **Sprint 2: the committee is
+a stub (`deliberations/{id}.isStub == true`, memo starts with `[STUB`)** — label it as placeholder
+advice. If the committee fails, the status simply stays `applied`.
 
 ## 4. Errors — always the same shape
 

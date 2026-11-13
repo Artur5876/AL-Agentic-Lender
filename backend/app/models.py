@@ -106,6 +106,9 @@ class ApplicationOut(ApiModel):
     valuation: dict | None = None
     metrics: dict | None = None
     risk_tier: str | None = None
+    ai_recommendation: dict | None = Field(
+        default=None, description="Set by the AI committee (US-313): decision, deliberationId,"
+                                  " completedAt. Null while status is 'applied'.")
     created_at: datetime
     updated_at: datetime
 
