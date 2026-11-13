@@ -112,6 +112,7 @@ underwriters get `role` set by the seed script.
 |---|---|---|---|
 | `GET /health` | anyone | Is the API up | — |
 | `POST /valuations` | signed in | Property spec → `estimate`, `low`, `high` (80% range), `modelVersion` + `valuationId`. **`isStub: true` = the model file is missing and the numbers are fake**; clients decide on this flag, not on the amount | US-121, US-403 |
+| `POST /affordability` | borrower | Borrowing estimate: income, debts, deposit, term → `maxLoan`, `limitedBy`, `lti`, `ltv`, `monthlyRepayment`, `dti`. Saves nothing | US-111 |
 | `POST /applications` | borrower | Submit an application → status `applied`; the AI committee then runs in the background and moves it to `ai_deliberated` | US-112, US-313 |
 | `GET /applications/{id}` | owner, assigned broker, underwriter | Read one application (404 if not yours) | US-311 |
 | `POST /applications/{id}/status` | per state machine | `{ "to": "<status>", "reason": "..." }`. **`underwriter_approved` also mints the loan note** (see below) | US-302, US-251, US-331 |
@@ -126,6 +127,7 @@ and project, via the Firebase Admin SDK), then reads the role from the `role` cl
 |---|---|---|---|---|
 | `GET /health` | 200 (public) | 200 | 200 | 200 |
 | `POST /valuations` | 401 | 201 | 201 | 201 |
+| `POST /affordability` | 401 | **200** | 403 `forbidden` | 403 `forbidden` |
 | `POST /applications` | 401 | **201** | 403 `forbidden` | 403 `forbidden` |
 | `GET /applications/{id}` | 401 | 200 own · 404 others | 200 assigned · 404 others | 200 any |
 | `POST /applications/{id}/status` → `underwriter_approved`, `conditionally_approved`, `declined` | 401 | 403 `actor_not_allowed` (own) · 404 others | 403 `actor_not_allowed` (assigned) · 404 others | **200** (if the state machine allows the move) |
@@ -137,11 +139,38 @@ and project, via the Firebase Admin SDK), then reads the role from the `role` cl
 - Status changes are checked by the state machine (`backend/app/lifecycle.py`): 409 if the move is
   not possible from the current status, 403 if your role may not make it, 422 if a reason is missing.
 - Every 401 response carries the header `WWW-Authenticate: Bearer`.
-- Tested in `backend/tests/test_auth.py`: every protected endpoint × (no token, 11 kinds of
+- Tested in `backend/tests/test_auth.py`: every protected endpoint (5) × (no token, 11 kinds of
   malformed token), wrong-role and right-role cases, and real ID tokens from the Auth emulator.
 
 Live lists (pipeline, "my applications", status timeline) are **not** API calls: read Firestore
 directly with a listener. Required queries are in `docs/data-model.md` section 4.
+
+### Borrowing estimate (US-111, mobile M-xx)
+
+```json
+POST /affordability
+{ "buyerType": "first_time", "grossAnnualIncome": 95000, "monthlyDebts": 300,
+  "deposit": 60000, "termYears": 30 }
+```
+
+Response `200` (nothing is stored):
+
+```json
+{ "maxLoan": 380000.0, "limitedBy": "lti", "lti": 4.0, "ltv": 0.8636,
+  "monthlyRepayment": 1814.18, "dti": 0.2671, "indicativeOnly": true }
+```
+
+- `maxLoan` and `limitedBy` come from the calculation module (`MortgageCalculator.max_loan`):
+  the lower of income × LTI cap (4.0 first-time, 3.5 subsequent) and the most the deposit allows
+  at 90 % LTV. `limitedBy` is `lti` or `deposit`, so the app can say *why* the limit is what it is.
+- `lti`, `ltv`, `monthlyRepayment` and `dti` are for **`maxLoan`**, from the same module.
+  `ltv` assumes the price is `maxLoan + deposit` (the most the borrower could buy).
+  `monthlyRepayment` uses the base APR over `termYears`.
+- Fractions, not percentages: `0.8636` = 86.36 %. `lti`/`dti` are `null` when income is 0;
+  `ltv` is `null` when income and deposit are both 0.
+- Bad input → `422 validation_error` with the field named in `details` (negative amounts,
+  `termYears` outside 5–35 or not a whole number, unknown `buyerType`, missing or extra fields).
+- `indicativeOnly` is always `true`: show it as an estimate, not an offer.
 
 ### Example: submit an application
 

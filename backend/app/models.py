@@ -75,6 +75,30 @@ class ApplicationCreate(ApiModel):
     valuation_id: str | None = None
 
 
+# ---------- borrowing estimate (US-111) ----------
+
+class AffordabilityRequest(ApiModel):
+    buyer_type: BuyerType
+    gross_annual_income: float = Field(ge=0)
+    monthly_debts: float = Field(ge=0)
+    deposit: float = Field(ge=0)
+    term_years: int = Field(ge=5, le=35)
+
+
+class AffordabilityOut(ApiModel):
+    max_loan: float = Field(description="Indicative maximum loan in euro (calc module).")
+    limited_by: Literal["lti", "deposit"] = Field(
+        description="Which rule caps the loan: income multiple (lti) or minimum deposit.")
+    lti: float | None = Field(description="maxLoan / income. Null when income is 0.")
+    ltv: float | None = Field(
+        description="maxLoan / (maxLoan + deposit). Null when both are 0.")
+    monthly_repayment: float = Field(description="For maxLoan over termYears at the base APR.")
+    dti: float | None = Field(
+        description="(monthlyDebts + monthlyRepayment) / monthly income. Null when income is 0.")
+    indicative_only: Literal[True] = Field(
+        default=True, description="Always true: an estimate, not an offer. Nothing is saved.")
+
+
 class StatusChange(ApiModel):
     to: Status
     reason: str | None = Field(default=None, max_length=1000)

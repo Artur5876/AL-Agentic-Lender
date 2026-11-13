@@ -66,7 +66,11 @@ def app_id(client):
 
 
 # Every endpoint that needs a token: (method, path, json body). {id} = app_id fixture.
+AFFORDABILITY = {"buyerType": "first_time", "grossAnnualIncome": 95000, "monthlyDebts": 300,
+                 "deposit": 60000, "termYears": 30}
+
 PROTECTED = [
+    pytest.param("POST", "/affordability", AFFORDABILITY, id="POST /affordability"),
     pytest.param("POST", "/valuations", PROPERTY, id="POST /valuations"),
     pytest.param("POST", "/applications", APPLICATION, id="POST /applications"),
     pytest.param("GET", "/applications/{id}", None, id="GET /applications/{id}"),
@@ -150,6 +154,14 @@ def test_not_your_application_is_404_not_403(client, app_id, headers):
                          ids=["borrower", "broker", "underwriter"])
 def test_any_signed_in_user_gets_a_valuation(client, headers):
     assert client.post("/valuations", json=PROPERTY, headers=headers).status_code == 201
+
+
+@pytest.mark.parametrize("headers", [BROKER, UNDERWRITER], ids=["broker", "underwriter"])
+def test_only_borrowers_get_a_borrowing_estimate(client, headers):
+    r = client.post("/affordability", json=AFFORDABILITY, headers=headers)
+    assert r.status_code == 403 and r.json()["error"]["code"] == "forbidden"
+    assert client.post("/affordability", json=AFFORDABILITY,
+                       headers=BORROWER).status_code == 200
 
 
 def test_borrower_submits(client):

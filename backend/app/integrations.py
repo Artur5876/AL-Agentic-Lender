@@ -11,6 +11,7 @@ from functools import lru_cache
 import joblib
 from calc.metrics import MortgageCalculator
 from common.app import Application
+from common.enums import Buyer
 from valuation.train import MODEL_PATH, predict
 
 STUB_MODEL_VERSION = "stub-0"
@@ -40,6 +41,29 @@ def estimate_value(property_spec: dict) -> dict:
 def compute_metrics(application: dict) -> dict:
     """Calculation module (US-410, AI lead): LTI, LTV, DTI, stressed DTI, repayment, checks."""
     return _calculator.compute_metrics(Application.from_dict(application)).to_dict()
+
+
+def affordability(buyer_type: str, gross_annual_income: float, monthly_debts: float,
+                  deposit: float, term_years: int) -> dict:
+    """Borrowing estimate (US-111): the most this borrower could borrow, and its figures.
+
+    Every figure comes from the calculation module (MortgageCalculator). The only step done
+    here is the assumed purchase price for the LTV: max loan + deposit (the most the borrower
+    could buy with that deposit). LTV is None when that price is 0 (no income and no deposit).
+    """
+    c = _calculator
+    limit = c.max_loan(gross_annual_income, deposit, Buyer(buyer_type))
+    loan = limit["maxLoan"]
+    price = loan + deposit
+    repayment = c.monthly_repayment(loan, c.limits.base_apr, term_years)
+    return {
+        "maxLoan": loan,
+        "limitedBy": str(limit["limitedBy"]),
+        "lti": c.lti(loan, gross_annual_income),
+        "ltv": c.ltv(loan, price) if price > 0 else None,
+        "monthlyRepayment": repayment,
+        "dti": c.dti(monthly_debts, repayment, gross_annual_income),
+    }
 
 
 # ---------------------------------------------------------------------------

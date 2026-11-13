@@ -29,6 +29,8 @@ from .lifecycle import (
     TransitionError,
 )
 from .models import (
+    AffordabilityOut,
+    AffordabilityRequest,
     ApplicationCreate,
     ApplicationOut,
     ErrorResponse,
@@ -140,6 +142,17 @@ def create_app(settings: Settings | None = None, repo: Repository | None = None,
             high=result["high"], model_version=result["modelVersion"],
             is_stub=result["modelVersion"] == integrations.STUB_MODEL_VERSION,
         )
+
+    @app.post("/affordability", response_model=AffordabilityOut,
+              tags=["applications"], responses=ERRORS,
+              summary="Borrowing estimate from income, debts, deposit and term (US-111). "
+                      "Saves nothing")
+    def affordability(body: AffordabilityRequest,
+                      user: CurrentUser = Depends(require_role(Actor.BORROWER))):
+        result = integrations.affordability(
+            body.buyer_type, body.gross_annual_income, body.monthly_debts, body.deposit,
+            body.term_years)
+        return AffordabilityOut.model_validate(result)
 
     @app.post("/applications", response_model=ApplicationOut, status_code=201,
               tags=["applications"], responses=ERRORS,
