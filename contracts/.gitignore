@@ -1,0 +1,6 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+# Written by scripts/deploy.js for the local chain; differs per machine.
+deployments/local.json
