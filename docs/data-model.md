@@ -72,7 +72,7 @@ The document ID is the human reference, e.g. `AL-2026-0117` (matches the mock-up
 | `valuation` | map or null | API | Copy of the valuation used: `valuationId`, `estimate`, `low`, `high`, `modelVersion` |
 | `metrics` | map | API (US-410) | `lti`, `ltv`, `dti`, `stressedDti`, `monthlyRepayment`, and `checks` (`ltiOk`, `ltvOk`, `dtiOk`, `stressedDtiOk`). `lti`/`dti`/`stressedDti` are null when income is 0. Seed documents carry illustrative numbers marked `source: "seed-illustrative"` and no `checks` |
 | `riskTier` | string or null | open decision | `low`, `medium`, `high`. Who sets it is not in the backlog — see section 5 |
-| `aiRecommendation` | map or null | API (US-313/414) | `decision`, `deliberationId`, `completedAt` — S2 |
+| `aiRecommendation` | map or null | API (US-313/414) | `decision`, `deliberationId` (= application ID), `completedAt`. Null while `applied`; set with the move to `ai_deliberated` (section 2.4) |
 | `decision` | map or null | API (US-251/252) | `outcome`, `reason`, `by`, `at` — S2 |
 | `loanNote` | map or null | API (US-251/331) | `tokenId`, `txHash`, `auditHash`, `auditTxHash`, `chainStatus` — S2 |
 | `payment` | map or null | API (US-151) | `status`, `paymentId` — S3 |
@@ -90,11 +90,60 @@ Allowed input values:
 `requestedBy` (UID), `createdAt`. The mobile app sends the `valuationId` with the application, and the
 API copies the result into `applications/{id}.valuation`.
 
-### 2.4 Later sprints (shape only, owners fill in details)
+### 2.4 `deliberations/{applicationId}` + `steps/{stepId}` — S2 (US-313)
 
-- `deliberations/{applicationId}`: `status`, `startedAt`, `completedAt`, `finalDecision`, `creditMemo`.
-  `steps/{stepId}`: `agent`, `model`, `promptVersion`, `input`, `output`, `reasoning`, `verdict`, `at`
-  (US-415, AI lead).
+Written by the API only, in **one transaction** together with the status change
+`applied → ai_deliberated` (actor `system`) and `applications/{id}.aiRecommendation`.
+If the committee fails or returns an invalid result, nothing is written, the status stays
+`applied` and the error is logged with the application ID.
+
+`deliberations/{applicationId}`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `applicationId` | string | Same as the document ID |
+| `status` | string | `completed` (failed runs are not stored in S2) |
+| `startedAt`, `completedAt` | timestamp | Server time around the committee run |
+| `finalDecision` | string | `approve`, `conditionally_approve` or `decline` |
+| `creditMemo` | string | Committee's written summary |
+| `isStub` | bool | `true` = placeholder committee, not real AI advice. Clients must label it |
+
+`deliberations/{applicationId}/steps/{stepId}`: one document per agent. `stepId` is
+`01-affordability`, `02-valuation`, `03-market_research`, `04-underwriting_strategist`
+(sorting by ID gives the order).
+
+| Field | Type | Notes |
+|---|---|---|
+| `agent` | string | `affordability`, `valuation`, `market_research`, `underwriting_strategist` |
+| `model` | string | Model name/version used by that agent (`stub-committee-0` for the stub) |
+| `output` | map | The agent's structured output. Figures are copied from the calculation module, never computed by an LLM |
+| `reasoning` | string | The agent's explanation |
+| `timestamp` | string | ISO 8601, UTC, e.g. `2026-11-13T14:02:11.123456+00:00` |
+
+The AI lead may add extra step fields (e.g. `promptVersion`, `input`, `verdict` for US-415);
+the API stores them as given.
+
+**Committee contract (US-313 ↔ US-414).** The backend calls `run_committee(application: dict) -> dict`
+(`backend/app/integrations.py`, stub until `ai/committee.py` exists) and validates the result with
+`validate_committee_result`:
+
+```json
+{
+  "decision": "approve | conditionally_approve | decline",
+  "creditMemo": "string",
+  "isStub": false,
+  "steps": [
+    {"agent": "affordability", "model": "...", "output": {}, "reasoning": "...",
+     "timestamp": "2026-11-13T14:02:11+00:00"}
+  ]
+}
+```
+
+`steps` must contain each of the four agents exactly once, with all five fields of the right type
+and a UTC timestamp. The committee does not use Firebase; the backend saves the result.
+
+### 2.5 Later sprints (shape only, owners fill in details)
+
 - `decisions/{decisionId}`: `applicationId`, `brokerId` (copied, for the rules), `outcome`, `reason`, `by`, `at`, `auditHash`, `auditTxHash` (US-251–253, US-331).
 - `applications/{id}/messages/{messageId}`: `senderId`, `senderRole`, `text` (1–2000 chars), `sentAt` (server time).
 - `supportRequests/{id}`: `borrowerId`, `applicationId` (optional), `category`, `description`, `status: "open"`, `createdAt`.
