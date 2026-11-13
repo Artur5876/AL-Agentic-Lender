@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import ie.mtu.agenticlender.screens.BorrowingEstimateScreen
 import ie.mtu.agenticlender.screens.LoanApplicationScreen
 import ie.mtu.agenticlender.screens.LoginScreen
 import ie.mtu.agenticlender.screens.MyApplicationScreen
@@ -64,7 +65,19 @@ fun AppNavigation() {
                 // AL-8 / AL-7: a returning borrower can go straight to their application
                 onViewApplication = {
                     navController.navigate("myApplication")
+                },
+                // AL-3 US-111: borrowing estimate
+                onEstimate = {
+                    navController.navigate("borrowingEstimate")
                 }
+            )
+        }
+
+        // AL-3 US-111 Enter income, debts, deposit and term for borrowing estimate
+        composable("borrowingEstimate") {
+
+            BorrowingEstimateScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 
