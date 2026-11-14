@@ -25,16 +25,38 @@ export interface Application {
   borrowerName: string;
   brokerId: string | null;
   status: Status;
+  buyerType?: "first_time" | "subsequent";
   property?: {
     county?: string;
     propertyType?: string;
     askingPrice?: number;
+    floorAreaM2?: number;
+    bedrooms?: number;
+    ber?: string;
   };
   financials?: {
+    grossAnnualIncome?: number;
+    monthlyDebts?: number;
+    deposit?: number;
     loanAmount?: number;
+    termYears?: number;
   };
-  // ltv is a FRACTION (0.882 = 88.2%). metrics is null until US-410 is connected.
-  metrics?: { ltv?: number | null } | null;
+  valuation?: {
+    estimate?: number;
+    low?: number;
+    high?: number;
+    modelVersion?: string;
+  } | null;
+  // Ratios are FRACTIONS (0.882 = 88.2%); lti is a multiple (3.5 = 3.5x income).
+  // metrics is null until US-410 is connected; lti/dti/stressedDti are null when income is 0.
+  metrics?: {
+    lti?: number | null;
+    ltv?: number | null;
+    dti?: number | null;
+    stressedDti?: number | null;
+    monthlyRepayment?: number | null;
+    checks?: { ltiOk?: boolean; ltvOk?: boolean; dtiOk?: boolean; stressedDtiOk?: boolean };
+  } | null;
   // Null until someone decides who sets it (open decision 1 in the data model).
   riskTier?: RiskTier | null;
 }

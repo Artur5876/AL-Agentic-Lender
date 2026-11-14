@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useApplications } from "../hooks/useApplications";
 import { decide, type DecisionOutcome } from "../api";
@@ -167,7 +168,9 @@ export default function Queue() {
                 return (
                   <tr key={a.id}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{a.borrowerName}</div>
+                      <Link to={`/applications/${a.id}`} className="font-medium text-indigo-700 hover:underline">
+                        {a.borrowerName}
+                      </Link>
                       <div className="text-xs text-slate-500">{a.id}</div>
                     </td>
                     <td className="px-4 py-3">

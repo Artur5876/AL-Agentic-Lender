@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import NoAccess from "./pages/NoAccess";
+import LoanFile from "./pages/LoanFile";
 import Queue from "./pages/Queue";
 
 export default function App() {
@@ -14,6 +15,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Queue />
+              </ProtectedRoute>
+            }
+        />
+        <Route
+            path="/applications/:id"
+            element={
+              <ProtectedRoute>
+                <LoanFile />
               </ProtectedRoute>
             }
         />
