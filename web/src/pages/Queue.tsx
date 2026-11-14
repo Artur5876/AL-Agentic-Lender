@@ -33,6 +33,8 @@ export default function Queue() {
   const [band, setBand] = useState<LtvBand | "all">("all");
   const [risk, setRisk] = useState<RiskTier | "none" | "all">("all");
   const [actionError, setActionError] = useState<string | null>(null);
+  // AL-24: minting takes a few seconds, so the row that is waiting on the API shows a spinner and its buttons are off.
+  const [busy, setBusy] = useState<{ id: string; outcome: DecisionOutcome } | null>(null);
 
   const rows = useMemo(
     () =>
@@ -54,11 +56,15 @@ export default function Queue() {
       reason = typed.trim();
     }
     setActionError(null);
+    setBusy({ id: app.id, outcome });
     try {
       await decide(app.id, outcome, reason);
       // No manual refresh needed: the live listener picks up the change.
     } catch (e) {
+      // e.g. 502 mint_failed: the status is unchanged, so the underwriter can simply try again.
       setActionError(e instanceof Error ? e.message : "Could not save the decision.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -197,13 +203,22 @@ export default function Queue() {
                           <div className="flex gap-2">
                             <button
                               onClick={() => onDecide(a, "underwriter_approved")}
-                              className="rounded bg-green-600 px-2 py-1 text-xs text-white"
+                              disabled={busy !== null}
+                              className="rounded bg-green-600 px-2 py-1 text-xs text-white disabled:opacity-50"
                             >
-                              Approve
+                              {busy?.id === a.id && busy.outcome === "underwriter_approved" ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  Minting loan note…
+                                </span>
+                              ) : (
+                                "Approve"
+                              )}
                             </button>
                             <button
                               onClick={() => onDecide(a, "declined")}
-                              className="rounded bg-red-600 px-2 py-1 text-xs text-white"
+                              disabled={busy !== null}
+                              className="rounded bg-red-600 px-2 py-1 text-xs text-white disabled:opacity-50"
                             >
                               Decline
                             </button>

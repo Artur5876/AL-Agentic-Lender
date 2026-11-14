@@ -57,6 +57,16 @@ export interface Application {
     monthlyRepayment?: number | null;
     checks?: { ltiOk?: boolean; ltvOk?: boolean; dtiOk?: boolean; stressedDtiOk?: boolean };
   } | null;
+  // Latest underwriter decision (US-251/252). reason is null for an approval.
+  decision?: { outcome?: Status; reason?: string | null; by?: string; at?: { toDate(): Date } | null } | null;
+  // Set only on underwriter_approved (US-251/321/331). Minted by the backend, never by the browser.
+  loanNote?: {
+    tokenId?: number;
+    txHash?: string;
+    auditHash?: string;
+    auditTxHash?: string;
+    chainStatus?: string;
+  } | null;
   // Null until someone decides who sets it (open decision 1 in the data model).
   riskTier?: RiskTier | null;
 }

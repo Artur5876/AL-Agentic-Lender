@@ -16,7 +16,7 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   return (
     <div className="flex justify-between gap-4 py-1.5 text-sm">
       <dt className="text-slate-500">{label}</dt>
-      <dd className={bold ? "font-semibold text-slate-900" : "text-slate-900"}>{value}</dd>
+      <dd className={`break-all text-right ${bold ? "font-semibold text-slate-900" : "text-slate-900"}`}>{value}</dd>
     </div>
   );
 }
@@ -175,6 +175,33 @@ export default function LoanFile() {
                 </dl>
               </Card>
             </div>
+            {(app.decision || app.loanNote) && (
+              <Card title="Decision and loan note">
+                <dl className="divide-y divide-slate-100">
+                  {app.decision && (
+                    <>
+                      <Row
+                        label="Decision"
+                        value={app.decision.outcome ? (STATUS_LABELS[app.decision.outcome] ?? app.decision.outcome) : "—"}
+                        bold
+                      />
+                      <Row label="Reason" value={app.decision.reason ?? "—"} />
+                      <Row label="Decided by" value={app.decision.by ?? "—"} />
+                      <Row label="Decided at" value={app.decision.at ? app.decision.at.toDate().toLocaleString("en-IE") : "—"} />
+                    </>
+                  )}
+                  {app.loanNote && (
+                    <>
+                      <Row label="Loan note token ID" value={app.loanNote.tokenId != null ? `#${app.loanNote.tokenId}` : "—"} bold />
+                      <Row label="Chain status" value={app.loanNote.chainStatus ?? "—"} />
+                      <Row label="Mint transaction" value={app.loanNote.txHash ?? "—"} />
+                      <Row label="Audit hash (SHA-256)" value={app.loanNote.auditHash ?? "—"} />
+                      <Row label="Audit transaction" value={app.loanNote.auditTxHash ?? "—"} />
+                    </>
+                  )}
+                </dl>
+              </Card>
+            )}
           </>
         )}
       </main>
