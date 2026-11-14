@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useApplication } from "../hooks/useApplication";
 import { STATUS_LABELS } from "../types";
+import { OVER_VALUATION_THRESHOLD, comparePrice } from "../valuation";
 
 const euro0 = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const euro2 = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
@@ -10,6 +11,7 @@ const money0 = (n?: number | null) => (n == null ? "—" : euro0.format(n));
 const money2 = (n?: number | null) => (n == null ? "—" : euro2.format(n));
 // Ratios are fractions: 0.2671 -> 26.7%
 const pct = (n?: number | null) => (n == null ? "—" : `${(n * 100).toFixed(1)}%`);
+const signedPct = (n: number) => `${n > 0 ? "+" : ""}${(n * 100).toFixed(1)}%`;
 const times = (n?: number | null) => (n == null ? "—" : `${n.toFixed(2)}×`);
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
@@ -62,6 +64,7 @@ export default function LoanFile() {
   const m = app?.metrics ?? null;
   const p = app?.property;
   const v = app?.valuation ?? null;
+  const price = comparePrice(p?.askingPrice, v?.estimate);
 
   // Monthly income is shown only so the DTI breakdown can be read; the DTI itself comes from US-410.
   const monthlyIncome = f?.grossAnnualIncome != null ? f.grossAnnualIncome / 12 : null;
@@ -131,6 +134,47 @@ export default function LoanFile() {
               </div>
               <p className="mt-3 text-xs text-slate-400">
                 LTI, DTI and repayment come from the calculation module; this page only displays them.
+              </p>
+            </Card>
+
+            <Card title="Asking price vs ML valuation">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="text-xs text-slate-500">Asking price</div>
+                  <div className="text-xl font-semibold text-slate-900">{money0(p?.askingPrice)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="text-xs text-slate-500">ML estimate</div>
+                  <div className="text-xl font-semibold text-slate-900">{money0(v?.estimate)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="text-xs text-slate-500">Difference</div>
+                  <div className="text-xl font-semibold text-slate-900">
+                    {price ? `${price.differenceEuro > 0 ? "+" : ""}${euro0.format(price.differenceEuro)}` : "—"}
+                  </div>
+                </div>
+                <div
+                  className={`rounded-lg border p-3 ${
+                    price?.isOverValued ? "border-red-300 bg-red-50" : "border-slate-200"
+                  }`}
+                >
+                  <div className="text-xs text-slate-500">Variance</div>
+                  <div className="text-xl font-semibold text-slate-900">{price ? signedPct(price.variance) : "—"}</div>
+                  {price && (
+                    <div className="mt-1 text-xs">
+                      {price.isOverValued ? (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700">Over-valued</span>
+                      ) : (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700">Within range</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-slate-400">
+                Flagged when the asking price is more than {OVER_VALUATION_THRESHOLD * 100}% above the estimate (same
+                rule as mobile and the calculation module).
+                {price == null && " No comparison is possible until a valuation is stored for this file."}
               </p>
             </Card>
 
