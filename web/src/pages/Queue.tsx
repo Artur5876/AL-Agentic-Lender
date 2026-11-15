@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useApplications } from "../hooks/useApplications";
 import { decide, type DecisionOutcome } from "../api";
+import ReasonDialog from "../components/ReasonDialog";
 import {
   LTV_BAND_LABELS,
   RISK_TIERS,
@@ -47,18 +48,18 @@ export default function Queue() {
     [apps, status, band, risk],
   );
 
+  // AL-25: decline / conditional approval open a dialog that insists on a written reason.
+  const [reasonFor, setReasonFor] = useState<{ app: Application; outcome: DecisionOutcome } | null>(null);
+
   async function onDecide(app: Application, outcome: DecisionOutcome) {
-    let reason: string | undefined;
     if (outcome !== "underwriter_approved") {
-      // US-252: declining / conditionally approving needs a written reason.
-      const typed = window.prompt("Reason (required):");
-      if (!typed || !typed.trim()) return;
-      reason = typed.trim();
+      setReasonFor({ app, outcome });
+      return;
     }
     setActionError(null);
     setBusy({ id: app.id, outcome });
     try {
-      await decide(app.id, outcome, reason);
+      await decide(app.id, outcome);
       // No manual refresh needed: the live listener picks up the change.
     } catch (e) {
       // e.g. 502 mint_failed: the status is unchanged, so the underwriter can simply try again.
@@ -215,6 +216,15 @@ export default function Queue() {
                                 "Approve"
                               )}
                             </button>
+                            {a.status === "ai_deliberated" && (
+                              <button
+                                onClick={() => onDecide(a, "conditionally_approved")}
+                                disabled={busy !== null}
+                                className="rounded bg-amber-500 px-2 py-1 text-xs text-white disabled:opacity-50"
+                              >
+                                Conditional
+                              </button>
+                            )}
                             <button
                               onClick={() => onDecide(a, "declined")}
                               disabled={busy !== null}
@@ -236,6 +246,20 @@ export default function Queue() {
           Showing {rows.length} of {apps.length}. LTV and risk tier show “—” until the backend fills them in.
         </p>
       </main>
+
+      {reasonFor && (
+        <ReasonDialog
+          title={reasonFor.outcome === "declined" ? "Decline application" : "Conditionally approve"}
+          subtitle={`${reasonFor.app.borrowerName} · ${reasonFor.app.id}`}
+          confirmLabel={reasonFor.outcome === "declined" ? "Decline" : "Conditionally approve"}
+          confirmClass={reasonFor.outcome === "declined" ? "bg-red-600" : "bg-amber-500"}
+          onCancel={() => setReasonFor(null)}
+          onConfirm={async (reason) => {
+            await decide(reasonFor.app.id, reasonFor.outcome, reason);
+            setReasonFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
