@@ -86,6 +86,11 @@ export default function LoanFile() {
         <Link to="/" className="text-sm text-indigo-700 hover:underline">
           ← Back to queue
         </Link>
+        {id && (
+          <Link to={`/applications/${id}/ai`} className="ml-4 text-sm text-indigo-700 hover:underline">
+            AI committee →
+          </Link>
+        )}
 
         {loading && <p className="text-slate-500">Loading…</p>}
 
