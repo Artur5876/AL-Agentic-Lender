@@ -120,11 +120,25 @@ If the committee fails or returns an invalid result, nothing is written, the sta
 | `reasoning` | string | The agent's explanation |
 | `timestamp` | string | ISO 8601, UTC, e.g. `2026-11-13T14:02:11.123456+00:00` |
 
-The AI lead may add extra step fields (e.g. `promptVersion`, `input`, `verdict` for US-415);
-the API stores them as given.
+Steps written by the AI committee (`ai/committee.py`, US-414/415) also carry these fields.
+The API stores every step exactly as given.
+
+| Field | Type | Notes |
+|---|---|---|
+| `provider` | string | `groq`, `gemini` or `ollama` (which model goes with which agent: `ai/llm/models.toml`) |
+| `promptVersion` | string | e.g. `affordability-v1`. Bumped every time a prompt changes |
+| `input` | map | What the agent was given: figures from the calculation module, or the other agents' findings for the strategist |
+| `verdict` | string or null | After the code's floor: `affordable`/`borderline`/`unaffordable`, `acceptable`/`caution`/`unacceptable`, or the decision for the strategist. `null` on a placeholder |
+| `latencyS` | number | Seconds the model took to answer |
+| `stub` | bool | `true` only on a placeholder step (market research until US-413) |
+
+`output` also keeps the model's own verdict (`modelVerdict` / `modelDecision`) and whether the
+code overrode it (`verdictOverridden` / `decisionOverridden`). Clients read the log straight
+from Firestore: staff who can see the application may read it, nobody may write it
+(rules tested in `firebase/tests/rules.test.mjs`).
 
 **Committee contract (US-313 ↔ US-414).** The backend calls `run_committee(application: dict) -> dict`
-(`backend/app/integrations.py`, stub until `ai/committee.py` exists) and validates the result with
+(`backend/app/integrations.py`: `ai/committee.py` when `AL_COMMITTEE_MODE=agents`, the stub otherwise) and validates the result with
 `validate_committee_result`:
 
 ```json
