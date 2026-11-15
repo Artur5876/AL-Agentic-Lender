@@ -7,6 +7,7 @@
 #   Auth emulator         localhost:9099
 #   Backend API + docs    http://localhost:8000/docs
 #   Local EVM chain       http://localhost:8545  (LoanNote, US-321/331)
+#   Ollama (not in compose: install it on the host)  http://localhost:11434  (US-421)
 
 services:
   firebase:
@@ -35,6 +36,12 @@ services:
       AL_BORROWER_REF_SALT: ${AL_BORROWER_REF_SALT:-}
       AL_CHAIN_SIGNER_KEY: ${AL_CHAIN_SIGNER_KEY:-}
       AL_CHAIN_BANK_ADDRESS: ${AL_CHAIN_BANK_ADDRESS:-}
+      # LLM committee (US-421): keys from the same .env; Ollama runs on the host machine.
+      AL_GROQ_API_KEY: ${AL_GROQ_API_KEY:-}
+      AL_GEMINI_API_KEY: ${AL_GEMINI_API_KEY:-}
+      AL_OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux; Docker Desktop has it built in
     volumes:
       - ./contracts/deployments:/app/deployments:ro
     ports:
