@@ -142,3 +142,15 @@ def test_from_dict_missing_valuation_key():
 def test_from_dict_converts_buyer_type():
     app = Application.from_dict(backend_dict(buyer_type=Buyer.SUBSEQUENT.value))
     assert app.buyer_type is Buyer.SUBSEQUENT
+
+
+def test_stressed_repayment_adds_the_buffer():
+    assert calc.stressed_repayment(335_000, 30) == 2008.49
+
+
+def test_monthly_surplus():
+    assert calc.monthly_surplus(95_000, 300, 1599.34) == 6017.33
+
+
+def test_monthly_surplus_can_be_negative():
+    assert calc.monthly_surplus(24_000, 500, 1800) == -300.
