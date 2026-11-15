@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # S2 default APR for the loan note, in basis points (390 = 3.90 %).
     default_apr_bps: int = 390
 
+    # ----- AI committee (US-414) -----
+    # "agents" = the real committee in ai/committee.py (needs the LLM keys, .env.example).
+    # "stub" = the rule-based placeholder in integrations.py: tests, or no keys.
+    committee_mode: Literal["stub", "agents"] = "stub"
+
 
 @lru_cache
 def get_settings() -> Settings:
