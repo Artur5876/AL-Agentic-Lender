@@ -23,6 +23,7 @@ model = "openai/gpt-oss-120b"
 [agents.valuation]
 provider = "ollama"
 model = "llama3.2:3b"
+temperature = 0           # same figures, same explanation
 
 [agents.market_research]
 provider = "gemini"
