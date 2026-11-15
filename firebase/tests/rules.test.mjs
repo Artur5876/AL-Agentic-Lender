@@ -9,7 +9,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
-  addDoc, collection, doc, getDoc, getDocs, orderBy, query,
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query,
   serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 
@@ -139,4 +139,36 @@ describe('reviews', () => {
   test('rating 6 rejected', () => assertFails(addDoc(collection(borrower(), 'reviews'), review(6))));
   test('broker cannot leave a review', () =>
     assertFails(addDoc(collection(broker(), 'reviews'), { ...review(4), borrowerId: 'ciaran' })));
+});
+
+describe('AI deliberation log (US-415): staff read it, nobody writes it', () => {
+  const log = 'deliberations/AL-2026-0001';
+  const step = `${log}/steps/01-affordability`;
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, log), { finalDecision: 'approve', isStub: false });
+      await setDoc(doc(db, step), {
+        agent: 'affordability', model: 'openai/gpt-oss-120b', output: { verdict: 'affordable' },
+        reasoning: 'Comfortable.', timestamp: '2026-11-15T12:00:00+00:00',
+      });
+    });
+  });
+
+  test('underwriter reads the log', () => assertSucceeds(getDoc(doc(underwriter(), log))));
+  test('underwriter reads every step', () =>
+    assertSucceeds(getDocs(collection(underwriter(), `${log}/steps`))));
+  test('assigned broker reads a step', () => assertSucceeds(getDoc(doc(broker(), step))));
+  test('other broker cannot read a step', () => assertFails(getDoc(doc(otherBroker(), step))));
+  test('borrower cannot read the log, even for own application', () =>
+    assertFails(getDoc(doc(borrower(), log))));
+  test('borrower cannot read a step', () => assertFails(getDoc(doc(borrower(), step))));
+  test('anonymous cannot read a step', () => assertFails(getDoc(doc(anonymous(), step))));
+  test('underwriter cannot edit a step', () =>
+    assertFails(updateDoc(doc(underwriter(), step), { reasoning: 'edited' })));
+  test('underwriter cannot add a step', () =>
+    assertFails(setDoc(doc(underwriter(), `${log}/steps/05-extra`), { agent: 'extra' })));
+  test('underwriter cannot delete a step', () => assertFails(deleteDoc(doc(underwriter(), step))));
+  test('underwriter cannot delete the log', () => assertFails(deleteDoc(doc(underwriter(), log))));
 });

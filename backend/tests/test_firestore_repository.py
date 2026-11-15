@@ -86,3 +86,26 @@ def test_record_decision_writes_application_and_decision_doc(repo):
         repo.record_decision(app["id"], Status.UNDERWRITER_APPROVED, Actor.UNDERWRITER, "uw",
                              None, now, decision, doc, note)
     assert len(repo.list_decisions(app["id"])) == 1
+
+
+
+
+def test_ai_steps_come_back_from_firestore_unchanged(repo, ai_committee):
+    data = {"buyerType": "first_time",
+            "financials": {"grossAnnualIncome": 95000, "monthlyDebts": 300, "deposit": 60000,
+                           "loanAmount": 335000, "termYears": 30},
+            "property": {"county": "Cork", "floorAreaM2": 110, "bedrooms": 3,
+                         "propertyType": "semi_detached", "ber": "B2", "askingPrice": 395000},
+            "valuation": None, "borrowerId": "b1", "brokerId": "broker-ciaran", "metrics": None}
+    app = repo.create_application(data, "b1", datetime.now(UTC))
+    result = ai_committee(app)
+    now = datetime.now(UTC)
+    deliberation = {"applicationId": app["id"], "status": "completed", "startedAt": now,
+                    "completedAt": now, "finalDecision": result["decision"],
+                    "creditMemo": result["creditMemo"], "isStub": False}
+    rec = {"decision": result["decision"], "deliberationId": app["id"], "completedAt": now}
+
+    repo.record_deliberation(app["id"], deliberation, result["steps"], rec, now)
+
+    stored = repo.get_deliberation(app["id"])["steps"]
+    assert [{k: v for k, v in s.items() if k != "id"} for s in stored] == result["steps"]
