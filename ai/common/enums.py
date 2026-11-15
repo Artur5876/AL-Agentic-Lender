@@ -9,3 +9,10 @@ class Buyer(StrEnum):
 class LimitedBy(StrEnum):
     LTI = "lti"
     DEPOSIT = "deposit"
+
+
+class Agent(StrEnum):
+    AFFORDABILITY = "affordability"
+    VALUATION = "valuation"
+    MARKET_RESEARCH = "market_research"
+    UNDERWRITING_STRATEGIST = "underwriting_strategist"

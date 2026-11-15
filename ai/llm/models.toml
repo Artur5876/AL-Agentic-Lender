@@ -1,0 +1,33 @@
+[defaults]
+timeout_s = 30
+temperature = 0.2
+
+[providers.groq]
+base_url = "https://api.groq.com/openai/v1"
+api_key_env = "AL_GROQ_API_KEY"
+
+[providers.gemini]
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+api_key_env = "AL_GEMINI_API_KEY"
+
+[providers.ollama]
+base_url = "http://localhost:11434/v1"
+base_url_env = "AL_OLLAMA_BASE_URL"   # in Docker: http://host.docker.internal:11434/v1
+local = true
+timeout_s = 120                       # a local model on CPU is slow
+
+[agents.affordability]
+provider = "groq"
+model = "openai/gpt-oss-120b"
+
+[agents.valuation]
+provider = "ollama"
+model = "llama3.2:3b"
+
+[agents.market_research]
+provider = "gemini"
+model = "gemini-2.5-flash"
+
+[agents.underwriting_strategist]
+provider = "gemini"
+model = "gemini-2.5-flash"
