@@ -87,6 +87,14 @@ class MortgageCalculator:
             "overValued": difference_pct > self.limits.overvaluation_threshold,
         }
 
+    def stressed_repayment(self, loan_amount: float, years: int) -> float:
+        rate = self.limits.base_apr + self.limits.stress_buffer
+        return self.monthly_repayment(loan_amount, rate, years)
+
+    @staticmethod
+    def monthly_surplus(income: float, monthly_debts: float, repayment: float) -> float:
+        return round(income / 12 - monthly_debts - repayment, 2)
+
     @staticmethod
     def monthly_repayment(principal: float, rate: float, years: int) -> float:
         n = years * 12
