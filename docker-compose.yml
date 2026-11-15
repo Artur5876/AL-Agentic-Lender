@@ -40,6 +40,8 @@ services:
       AL_GROQ_API_KEY: ${AL_GROQ_API_KEY:-}
       AL_GEMINI_API_KEY: ${AL_GEMINI_API_KEY:-}
       AL_OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+      # "agents" = real AI committee (US-414), "stub" = placeholder that needs no keys.
+      AL_COMMITTEE_MODE: ${AL_COMMITTEE_MODE:-stub}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # needed on Linux; Docker Desktop has it built in
     volumes:

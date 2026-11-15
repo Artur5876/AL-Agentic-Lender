@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+import committee as ai_committee
 import joblib
 from calc.metrics import MortgageCalculator
 from common.app import Application
 from common.enums import Buyer
 from valuation.train import MODEL_PATH, predict
+
+from .config import get_settings
 
 STUB_MODEL_VERSION = "stub-0"
 _calculator = MortgageCalculator()
@@ -81,9 +84,9 @@ def affordability(buyer_type: str, gross_annual_income: float, monthly_debts: fl
 # never touches Firebase, and never does arithmetic: every figure comes from the
 # calculation module (application["metrics"], filled by ai/calc at submission).
 #
-# SWITCH TO THE REAL COMMITTEE: once ai/committee.py provides the same function,
-# add this one line directly below the stub function (it replaces the stub):
-#     from committee import run_committee  # noqa: E402,F811  (ai/committee.py, US-414)
+# WHICH COMMITTEE (US-414): AL_COMMITTEE_MODE=agents runs ai/committee.py (the real
+# agents, needs the LLM keys); "stub" (the default, used by every test) runs
+# stub_committee below, which needs no keys and no network.
 # ---------------------------------------------------------------------------
 
 COMMITTEE_DECISIONS = frozenset({"approve", "conditionally_approve", "decline"})
@@ -97,7 +100,14 @@ class CommitteeResultError(ValueError):
 
 
 def run_committee(application: dict) -> dict:
-    """STUB committee (US-313) until the AI lead's agents (US-414) are connected.
+    """The committee the API runs: the AI agents (US-414) or the stub, by AL_COMMITTEE_MODE."""
+    if get_settings().committee_mode == "agents":
+        return ai_committee.run_committee(application)
+    return stub_committee(application)
+
+
+def stub_committee(application: dict) -> dict:
+    """STUB committee (US-313): rule-based placeholder for tests and running without keys.
 
     Copies figures from application["metrics"] (calc module) and decides from the
     calc module's own pass/fail checks. It calculates nothing itself. Output is

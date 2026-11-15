@@ -7,6 +7,8 @@ COPY ai/calc ./ai/calc
 COPY ai/common ./ai/common
 COPY ai/valuation ./ai/valuation
 COPY ai/llm ./ai/llm
+COPY ai/agents ./ai/agents
+COPY ai/committee.py ./ai/committee.py
 ENV PYTHONPATH=/app/ai
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
